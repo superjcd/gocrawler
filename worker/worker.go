@@ -6,13 +6,15 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/superjcd/gocrawler/parser"
 	"github.com/superjcd/gocrawler/request"
 	"github.com/superjcd/gocrawler/scheduler/nsq"
 )
 
 type Worker interface {
 	Run()
-	ModifyRequest(req *request.Request)
+	BeforeRequest(context.Context, *request.Request)
+	BeforeSave(context.Context, *parser.ParseResult)
 }
 
 type worker struct {
@@ -38,13 +40,18 @@ func NewWorker(workers, retries int, saveRequestData bool, opts ...Option) *work
 	return w
 }
 
-func (w *worker) ModifyRequest(req *request.Request) {
+// Lifecycle functions
+func (w *worker) BeforeRequest(ctx context.Context, req *request.Request) {
 	if w.RequsetModifier != nil {
 		err := w.RequsetModifier(req)
 		if err != nil {
 			panic(err)
 		}
 	}
+}
+
+func (w *worker) BeforeSave(ctx context.Context, par *parser.ParseResult) {
+
 }
 
 func (w *worker) Run() {
@@ -75,7 +82,7 @@ func singleRun(w *worker) {
 		originReq := req
 
 		// Fetch
-		w.ModifyRequest(req)
+		w.BeforeRequest(context.Background(), req)
 		resp, err := w.Fetcher.Fetch(req)
 
 		if err != nil {
@@ -119,7 +126,9 @@ func singleRun(w *worker) {
 					}
 				}
 			}
-			//
+
+			w.BeforeSave(context.Background(), parseResult)  // 假设注入了taskId
+
 			if err := w.Store.Save(parseResult.Items...); err != nil {
 				log.Printf("item saved failed err: %v;items: ", err)
 				continue

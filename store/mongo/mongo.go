@@ -2,11 +2,13 @@ package mongo
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"sync"
 	"time"
 
 	"github.com/qiniu/qmgo"
+	"github.com/superjcd/gocrawler/counter"
 	"github.com/superjcd/gocrawler/parser"
 	"github.com/superjcd/gocrawler/store"
 )
@@ -14,6 +16,7 @@ import (
 type BufferedMongoStorage struct {
 	L       *sync.Mutex
 	Cli     *qmgo.QmgoClient
+	counter counter.Counter
 	buf     []parser.ParseItem
 	bufSize int
 }
@@ -26,12 +29,11 @@ var _ store.Storage = (*MongoStorage)(nil)
 
 const DEFAULT_BUFFER_SIZE = 100
 
-
 func NewMongoStorage(uri, database, collection string) *MongoStorage {
 	ctx := context.Background()
 	cli, err := qmgo.Open(ctx, &qmgo.Config{Uri: uri,
 		Database: database,
-		Coll:     collection})
+		Coll:     collection}) // counter
 	if err != nil {
 		panic(err)
 	}
@@ -39,7 +41,6 @@ func NewMongoStorage(uri, database, collection string) *MongoStorage {
 	return &MongoStorage{Cli: cli}
 }
 
-// TODO: index 不要忘记
 func (s *MongoStorage) Save(items ...parser.ParseItem) error {
 	var result *qmgo.InsertOneResult
 	var err error
@@ -81,7 +82,7 @@ func NewBufferedMongoStorage(uri, database, collection string, bufferSize int, a
 	go func() {
 		for t := range ticker.C {
 			log.Printf("auto flush triggered at %v", t)
-			store.Flush()
+			store.flush()
 		}
 
 	}()
@@ -95,7 +96,7 @@ func (s *BufferedMongoStorage) Save(items ...parser.ParseItem) error {
 	defer s.L.Unlock()
 
 	if len(items) > (s.bufSize - len(s.buf)) {
-		if err := s.Flush(); err != nil {
+		if err := s.flush(); err != nil {
 			return err
 		}
 
@@ -105,21 +106,50 @@ func (s *BufferedMongoStorage) Save(items ...parser.ParseItem) error {
 	return nil
 }
 
-func (s *BufferedMongoStorage) Flush() error {
+func (s *BufferedMongoStorage) flush() error {
+	//
+
 	if len(s.buf) == 0 {
 		return nil
 	}
-	err := s.InsertManyTOMongo(s.buf...)
+	err := s.insertManyTOMongo(s.buf...) //  我需要拿到{taskid: 数量}
 	if err != nil {
 		return err
 	}
-	// re-allocate a new buffer
+	tc := collectTaskCounts(s.buf)
+	s.afterFlush(tc)
 	s.buf = make([]parser.ParseItem, 0, s.bufSize)
 	log.Printf("Flushed")
 	return nil
 }
 
-func (s *BufferedMongoStorage) InsertManyTOMongo(items ...parser.ParseItem) error {
+func collectTaskCounts(buf []parser.ParseItem) (tc map[string]int64) {
+	tc = make(map[string]int64, 128)
+	for _, item := range buf {
+		if taskId, ok := item["taskId"]; !ok {
+			panic(fmt.Errorf("`taskId` not fount in Parseitem, if u want to use the task counter, then taskId embeded must be stuffed in the ParsedItem"))
+		} else {
+			switch v := taskId.(type) {
+			case string:
+				tc[v] += 1
+			default:
+				panic("`taskId` must be string")
+			}
+		}
+
+	}
+	return tc
+}
+
+func (s *BufferedMongoStorage) afterFlush(tc map[string]int64) {
+	// add task counts
+	for k, v := range tc {
+		s.counter.Incr(k, v)
+	}
+}
+
+func (s *BufferedMongoStorage) insertManyTOMongo(items ...parser.ParseItem) error {
+	// ...  {taskid: +1}
 	if result, err := s.Cli.Collection.InsertMany(context.Background(), items); err != nil {
 		return err
 	} else {
@@ -129,6 +159,8 @@ func (s *BufferedMongoStorage) InsertManyTOMongo(items ...parser.ParseItem) erro
 }
 
 func (s *BufferedMongoStorage) Close() error {
-	s.Flush()
+	s.flush()
 	return s.Cli.Close(context.Background())
 }
+
+// redis 可以使用transaction,  {taskid: 次数}
