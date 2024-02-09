@@ -40,10 +40,9 @@ func NewWorker(workers, retries int, saveRequestData bool, opts ...Option) *work
 	return w
 }
 
-// Lifecycle functions
 func (w *worker) BeforeRequest(ctx context.Context, req *request.Request) {
-	if w.RequsetModifier != nil {
-		err := w.RequsetModifier(req)
+	if w.BeforeRequestHook != nil {
+		err := w.BeforeRequestHook(ctx, req) //
 		if err != nil {
 			panic(err)
 		}
@@ -51,6 +50,12 @@ func (w *worker) BeforeRequest(ctx context.Context, req *request.Request) {
 }
 
 func (w *worker) BeforeSave(ctx context.Context, par *parser.ParseResult) {
+	if w.BeforeSaveHook != nil {
+		err := w.BeforeSaveHook(ctx, par)
+		if err != nil {
+			panic(err)
+		}
+	}
 
 }
 
@@ -127,7 +132,7 @@ func singleRun(w *worker) {
 				}
 			}
 
-			w.BeforeSave(context.Background(), parseResult)  // 假设注入了taskId
+			w.BeforeSave(context.Background(), parseResult) // 假设注入了taskId
 
 			if err := w.Store.Save(parseResult.Items...); err != nil {
 				log.Printf("item saved failed err: %v;items: ", err)

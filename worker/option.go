@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"context"
 	"time"
 
 	"github.com/superjcd/gocrawler/fetcher"
@@ -12,8 +13,6 @@ import (
 	"golang.org/x/time/rate"
 )
 
-type RequsetModifier func(*request.Request) error
-
 type options struct {
 	Scheduler         scheduler.Scheduler
 	Limiter           *rate.Limiter
@@ -23,10 +22,18 @@ type options struct {
 	Fetcher           fetcher.Fetcher
 	Parser            parser.Parser
 	Store             store.Storage
-	RequsetModifier   RequsetModifier
 	Duration          time.Duration
 	AddtionalHashKeys []string
+
+	BeforeRequestHook BeforeRequestHook
+	BeforeSaveHook    BeforeSaveHook
 }
+
+// lifecycle hooks
+
+type BeforeRequestHook func(context.Context, *request.Request) error
+
+type BeforeSaveHook func(context.Context, *parser.ParseResult) error
 
 type Option func(opts *options)
 
@@ -45,12 +52,6 @@ func WithStore(store store.Storage) Option {
 func WithFetcher(fetcher fetcher.Fetcher) Option {
 	return func(opts *options) {
 		opts.Fetcher = fetcher
-	}
-}
-
-func WithRequestModifer(m RequsetModifier) Option {
-	return func(opts *options) {
-		opts.RequsetModifier = m
 	}
 }
 
@@ -84,5 +85,17 @@ func WithParser(p parser.Parser) Option {
 func WithAddtionalHashKeys(keys []string) Option {
 	return func(opts *options) {
 		opts.AddtionalHashKeys = keys
+	}
+}
+
+func WithBeforeRequestHook(h BeforeRequestHook) Option {
+	return func(opts *options) {
+		opts.BeforeRequestHook = h
+	}
+}
+
+func WithBeforeSaveHook(h BeforeSaveHook) Option {
+	return func(opts *options) {
+		opts.BeforeSaveHook = h
 	}
 }
