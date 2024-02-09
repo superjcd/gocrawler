@@ -2,7 +2,6 @@ package cookie
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -24,10 +23,10 @@ func (c *RedisCookieGetter) Get() (*cookiejar.Jar, error) {
 	jar, _ := cookiejar.New(nil)
 	cookieStr, err := c.RCli.SRandMember(c.Key).Result()
 	if err != nil {
-		fmt.Println(3)
+
 		return nil, err
 	}
-	fmt.Println(cookieStr)
+
 	var cookieData map[string]string
 	json.Unmarshal([]byte(cookieStr), &cookieData)
 
