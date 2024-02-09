@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-redis/redis"
 	"github.com/qiniu/qmgo"
 	"github.com/superjcd/gocrawler/counter"
 	"github.com/superjcd/gocrawler/parser"
@@ -14,11 +15,21 @@ import (
 )
 
 type BufferedMongoStorage struct {
-	L       *sync.Mutex
-	Cli     *qmgo.QmgoClient
-	counter counter.Counter
-	buf     []parser.ParseItem
-	bufSize int
+	L         *sync.Mutex
+	Cli       *qmgo.QmgoClient
+	buf       []parser.ParseItem
+	bufSize   int
+	counter   counter.Counter
+	taskField string
+}
+
+type BufferedMongoStorageOption func(s *BufferedMongoStorage)
+
+func WithRedisCounter(r_config redis.Options, ttl time.Duration, counterPrefix, keyField string) BufferedMongoStorageOption {
+	return func(s *BufferedMongoStorage) {
+		redisCounter := counter.NewRedisTaskCounters(r_config, ttl, counterPrefix, keyField)
+		s.counter = redisCounter
+	}
 }
 
 type MongoStorage struct {
@@ -58,7 +69,7 @@ func (s *MongoStorage) Save(items ...parser.ParseItem) error {
 	return nil
 }
 
-func NewBufferedMongoStorage(uri, database, collection string, bufferSize int, autoFlushInterval time.Duration) *BufferedMongoStorage {
+func NewBufferedMongoStorage(uri, database, collection string, bufferSize int, autoFlushInterval time.Duration, opts ...BufferedMongoStorageOption) *BufferedMongoStorage {
 	ctx := context.Background()
 	cli, err := qmgo.Open(ctx, &qmgo.Config{Uri: uri,
 		Database: database,
@@ -76,6 +87,9 @@ func NewBufferedMongoStorage(uri, database, collection string, bufferSize int, a
 	var l sync.Mutex
 
 	store := &BufferedMongoStorage{Cli: cli, L: &l, bufSize: bufferSize, buf: buf}
+	for _, option := range opts {
+		option(store)
+	}
 
 	ticker := time.NewTicker(autoFlushInterval)
 
@@ -142,7 +156,6 @@ func collectTaskCounts(buf []parser.ParseItem) (tc map[string]int64) {
 }
 
 func (s *BufferedMongoStorage) afterFlush(tc map[string]int64) {
-	// add task counts
 	for k, v := range tc {
 		s.counter.Incr(k, v)
 	}
@@ -162,5 +175,3 @@ func (s *BufferedMongoStorage) Close() error {
 	s.flush()
 	return s.Cli.Close(context.Background())
 }
-
-// redis 可以使用transaction,  {taskid: 次数}

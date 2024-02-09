@@ -11,6 +11,7 @@ import (
 type Counter interface {
 	Incr(key string, num int64)
 	GetCounterPrefix() string
+	GetTaskIdField() string
 }
 
 // Redis transactions use optimistic locking.
@@ -19,20 +20,25 @@ const (
 )
 
 type RedisTaskCounters struct {
-	prefix string
-	RCli   *redis.Client
-	TTL    time.Duration
+	prefix       string
+	taskKeyField string
+	RCli         *redis.Client
+	TTL          time.Duration
 }
 
-func NewRedisTaskCounters(r_config redis.Options, ttl time.Duration, counterPrefix string) *RedisTaskCounters {
+func NewRedisTaskCounters(r_config redis.Options, ttl time.Duration, counterPrefix, taskField string) *RedisTaskCounters {
 	// r_config redis.Options,
-	rc := &RedisTaskCounters{TTL: ttl, prefix: counterPrefix}
+	rc := &RedisTaskCounters{TTL: ttl, prefix: counterPrefix, taskKeyField: taskField}
 	rc.RCli = redis.NewClient(&r_config)
 	return rc
 }
 
 func (c *RedisTaskCounters) GetCounterPrefix() string {
 	return c.prefix
+}
+
+func (c *RedisTaskCounters) GetTaskIdField() string {
+	return c.taskKeyField
 }
 
 func (c *RedisTaskCounters) Incr(key string, increment int64) {
