@@ -95,8 +95,9 @@ func singleRun(w *worker) {
 			if req.Retry < w.MaxRetries {
 				originReq.Retry += 1
 				w.Scheduler.Push(nsq.NSQ_PUSH, originReq)
+			} else {
+				log.Printf("too many failures for request:%s, exceed max retries: %d", req.URL, w.MaxRetries)
 			}
-			log.Printf("failure times for request:%s ecceed max retries: %d", req.URL, w.MaxRetries)
 			continue
 		}
 
