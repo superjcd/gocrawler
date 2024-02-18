@@ -142,7 +142,7 @@ func (s *BufferedMongoStorage) flush() error {
 		tc := s.collectTaskCounts(s.buf)
 		s.count(tc)
 	}
-
+	// update buffer to an empty buffer
 	s.buf = make([]parser.ParseItem, 0, s.bufSize)
 	log.Printf("Flushed")
 	return nil

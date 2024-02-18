@@ -109,7 +109,7 @@ func singleRun(w *worker) {
 		// Parse
 		parseResult, err := w.Parser.Parse(resp)
 		if err != nil {
-			log.Printf("parsed failed for request: %s", req.URL)
+			log.Printf("parse failed for request: %s, error: %v", req.URL, err)
 			originReq.Retry += 1
 			w.Scheduler.Push(nsq.NSQ_PUSH, originReq)
 			continue

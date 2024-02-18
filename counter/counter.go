@@ -1,6 +1,7 @@
 package counter
 
 import (
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -27,7 +28,9 @@ type RedisTaskCounters struct {
 }
 
 func NewRedisTaskCounters(r_config redis.Options, ttl time.Duration, counterPrefix, taskField string) *RedisTaskCounters {
-	// r_config redis.Options,
+	if !strings.HasSuffix(counterPrefix, ":") {
+		counterPrefix = counterPrefix + ":"
+	}
 	rc := &RedisTaskCounters{TTL: ttl, prefix: counterPrefix, taskKeyField: taskField}
 	rc.RCli = redis.NewClient(&r_config)
 	return rc
@@ -43,6 +46,7 @@ func (c *RedisTaskCounters) GetTaskIdField() string {
 
 func (c *RedisTaskCounters) Incr(key string, increment int64) {
 	// transaction
+	key = c.prefix + key
 	txf := func(tx *redis.Tx) error {
 		// Get the current value or zero.
 		n, err := tx.Get(key).Int64()
