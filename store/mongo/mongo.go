@@ -15,12 +15,12 @@ import (
 )
 
 type BufferedMongoStorage struct {
-	L         *sync.Mutex
-	Cli       *qmgo.QmgoClient
-	buf       []parser.ParseItem
-	bufSize   int
-	counter   counter.Counter
-	taskField string
+	L            *sync.Mutex
+	Cli          *qmgo.QmgoClient
+	buf          []parser.ParseItem
+	bufSize      int
+	counter      counter.Counter
+	taskKeyField string
 }
 
 type BufferedMongoStorageOption func(s *BufferedMongoStorage)
@@ -29,6 +29,7 @@ func WithRedisCounter(r_config redis.Options, ttl time.Duration, counterPrefix, 
 	return func(s *BufferedMongoStorage) {
 		redisCounter := counter.NewRedisTaskCounters(r_config, ttl, counterPrefix, keyField)
 		s.counter = redisCounter
+		s.taskKeyField = keyField
 	}
 }
 
@@ -109,39 +110,49 @@ func (s *BufferedMongoStorage) Save(items ...parser.ParseItem) error {
 	s.L.Lock()
 	defer s.L.Unlock()
 
-	if len(items) > (s.bufSize - len(s.buf)) {
-		if err := s.flush(); err != nil {
-			return err
+	for {
+		if len(items) > s.bufSize {
+			return fmt.Errorf("number of items too large(larger than the max bufSize), either increase storage bufSize or decrease number of items")
 		}
 
-	} else {
-		s.buf = append(s.buf, items...)
+		if len(items) > (s.bufSize - len(s.buf)) {
+			if err := s.flush(); err != nil {
+				return err
+			}
+
+		} else {
+			s.buf = append(s.buf, items...)
+			break
+		}
 	}
+
 	return nil
 }
 
 func (s *BufferedMongoStorage) flush() error {
-	//
-
 	if len(s.buf) == 0 {
 		return nil
 	}
-	err := s.insertManyTOMongo(s.buf...) //  我需要拿到{taskid: 数量}
+	err := s.insertManyTOMongo(s.buf...)
 	if err != nil {
 		return err
 	}
-	tc := collectTaskCounts(s.buf)
-	s.afterFlush(tc)
+
+	if s.counter != nil {
+		tc := s.collectTaskCounts(s.buf)
+		s.count(tc)
+	}
+
 	s.buf = make([]parser.ParseItem, 0, s.bufSize)
 	log.Printf("Flushed")
 	return nil
 }
 
-func collectTaskCounts(buf []parser.ParseItem) (tc map[string]int64) {
+func (s *BufferedMongoStorage) collectTaskCounts(buf []parser.ParseItem) (tc map[string]int64) {
 	tc = make(map[string]int64, 128)
 	for _, item := range buf {
-		if taskId, ok := item["taskId"]; !ok {
-			panic(fmt.Errorf("`taskId` not fount in Parseitem, if u want to use the task counter, then taskId embeded must be stuffed in the ParsedItem"))
+		if taskId, ok := item[s.taskKeyField]; !ok {
+			panic(fmt.Errorf("`%s` not found in Parseitem, if you want to use the task counter, then `%s` embeded must be stuffed in the ParsedItem", s.taskKeyField, s.taskKeyField))
 		} else {
 			switch v := taskId.(type) {
 			case string:
@@ -155,14 +166,13 @@ func collectTaskCounts(buf []parser.ParseItem) (tc map[string]int64) {
 	return tc
 }
 
-func (s *BufferedMongoStorage) afterFlush(tc map[string]int64) {
+func (s *BufferedMongoStorage) count(tc map[string]int64) {
 	for k, v := range tc {
 		s.counter.Incr(k, v)
 	}
 }
 
 func (s *BufferedMongoStorage) insertManyTOMongo(items ...parser.ParseItem) error {
-	// ...  {taskid: +1}
 	if result, err := s.Cli.Collection.InsertMany(context.Background(), items); err != nil {
 		return err
 	} else {

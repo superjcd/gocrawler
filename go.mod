@@ -4,23 +4,17 @@ go 1.21.6
 
 require (
 	github.com/CUCyber/ja3transport v0.0.0-20201031204932-8a22ac8ab5d7
-	github.com/PuerkitoBio/goquery v1.8.1
 	github.com/go-redis/redis v6.15.9+incompatible
 	github.com/nsqio/go-nsq v1.1.0
 	github.com/qiniu/qmgo v1.1.8
 	github.com/rpcxio/rpcx-etcd v0.3.2
-	github.com/rpcxio/rpcx-examples v1.1.6
 	github.com/smallnest/rpcx v1.8.24
-	go.uber.org/zap v1.26.0
-	golang.org/x/net v0.21.0
-	golang.org/x/text v0.14.0
 	golang.org/x/time v0.5.0
 )
 
 require (
 	github.com/akutz/memconn v0.1.0 // indirect
 	github.com/alitto/pond v1.8.3 // indirect
-	github.com/andybalholm/cascadia v1.3.1 // indirect
 	github.com/apache/thrift v0.19.0 // indirect
 	github.com/cenk/backoff v2.2.1+incompatible // indirect
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
@@ -94,11 +88,14 @@ require (
 	go.mongodb.org/mongo-driver v1.13.1 // indirect
 	go.uber.org/mock v0.4.0 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
+	go.uber.org/zap v1.26.0 // indirect
 	golang.org/x/crypto v0.19.0 // indirect
 	golang.org/x/exp v0.0.0-20240205201215-2c58cdc269a3 // indirect
 	golang.org/x/mod v0.15.0 // indirect
+	golang.org/x/net v0.21.0 // indirect
 	golang.org/x/sync v0.6.0 // indirect
 	golang.org/x/sys v0.17.0 // indirect
+	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/tools v0.17.0 // indirect
 	google.golang.org/genproto v0.0.0-20210602131652-f16073e35f0c // indirect
 	google.golang.org/grpc v1.38.0 // indirect
