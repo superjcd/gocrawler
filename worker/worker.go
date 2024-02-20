@@ -21,18 +21,19 @@ type worker struct {
 	Workers         int
 	MaxRetries      int
 	SaveRequestData bool
+	MaxRunTime      time.Duration
 	options
 }
 
 var _ Worker = (*worker)(nil)
 
-func NewWorker(workers, retries int, saveRequestData bool, opts ...Option) *worker {
+func NewWorker(workers, retries int, saveRequestData bool, maxRunTime time.Duration, opts ...Option) *worker {
 	options := options{}
 
 	for _, opt := range opts {
 		opt(&options)
 	}
-	w := &worker{Workers: workers, MaxRetries: retries, SaveRequestData: saveRequestData}
+	w := &worker{Workers: workers, MaxRetries: retries, SaveRequestData: saveRequestData, MaxRunTime: maxRunTime}
 	w.options = options
 
 	go w.Scheduler.Schedule()
@@ -42,7 +43,7 @@ func NewWorker(workers, retries int, saveRequestData bool, opts ...Option) *work
 
 func (w *worker) BeforeRequest(ctx context.Context, req *request.Request) {
 	if w.BeforeRequestHook != nil {
-		err := w.BeforeRequestHook(ctx, req) //
+		err := w.BeforeRequestHook(ctx, req) 
 		if err != nil {
 			panic(err)
 		}
@@ -60,11 +61,16 @@ func (w *worker) BeforeSave(ctx context.Context, par *parser.ParseResult) {
 }
 
 func (w *worker) Run() {
+	ctx, cancel := context.WithTimeout(
+		context.Background(),
+		w.MaxRunTime,
+	)
+	defer cancel()
 	for i := 0; i < w.Workers; i++ {
 		go singleRun(w)
 	}
 
-	time.Sleep(time.Minute * 5) // TODO
+	<-ctx.Done()
 }
 
 func singleRun(w *worker) {
@@ -96,7 +102,7 @@ func singleRun(w *worker) {
 				originReq.Retry += 1
 				w.Scheduler.Push(nsq.NSQ_PUSH, originReq)
 			} else {
-				log.Printf("too many failures for request:%s, exceed max retries: %d", req.URL, w.MaxRetries)
+				log.Printf("too many fetch failures for request:%s, exceed max retries: %d", req.URL, w.MaxRetries)
 			}
 			continue
 		}
@@ -133,7 +139,7 @@ func singleRun(w *worker) {
 				}
 			}
 
-			w.BeforeSave(context.Background(), parseResult) // 假设注入了taskId
+			w.BeforeSave(context.Background(), parseResult)
 
 			if err := w.Store.Save(parseResult.Items...); err != nil {
 				log.Printf("item saved failed err: %v;items: ", err)

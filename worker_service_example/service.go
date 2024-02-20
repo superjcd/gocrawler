@@ -1,10 +1,13 @@
-package worker_service
+package worker_service_example
 
 import (
 	"context"
 	"errors"
 	"fmt"
 	"net"
+
+
+	
 )
 
 type WorkerService struct{}
@@ -14,6 +17,10 @@ type GreetArgs struct {
 
 type GreetReply struct {
 	Data string
+}
+
+func NewWorkerService() {
+
 }
 
 func (w *WorkerService) Greet(ctx context.Context, args *GreetArgs, reply *GreetReply) error {
