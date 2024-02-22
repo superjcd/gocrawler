@@ -16,9 +16,9 @@ import (
 type options struct {
 	Scheduler         scheduler.Scheduler
 	Limiter           *rate.Limiter
-	UseVist           bool
-	Vister            visit.Visit
-	VisterTTL         time.Duration
+	UseVisit           bool
+	Visiter            visit.Visit
+	VisiterTTL         time.Duration
 	Fetcher           fetcher.Fetcher
 	Parser            parser.Parser
 	Store             store.Storage
@@ -66,9 +66,9 @@ func WithLimiter(limiter *rate.Limiter) Option {
 
 func WithVisiter(v visit.Visit, ttl time.Duration) Option {
 	return func(opts *options) {
-		opts.Vister = v
-		opts.UseVist = true
-		opts.VisterTTL = ttl
+		opts.Visiter = v
+		opts.UseVisit = true
+		opts.VisiterTTL = ttl
 
 	}
 }

@@ -91,14 +91,16 @@ func singleRun(w *worker) {
 			continue
 		}
 		var reqKey string
-		if w.AddtionalHashKeys == nil {
-			reqKey = req.Hash()
-		} else {
-			reqKey = req.Hash(w.AddtionalHashKeys...)
-		}
+		if w.UseVisit {
+			if w.AddtionalHashKeys == nil {
+				reqKey = req.Hash()
+			} else {
+				reqKey = req.Hash(w.AddtionalHashKeys...)
+			}
 
-		if w.UseVist && w.Vister.IsVisited(reqKey) {
-			continue
+			if w.Visiter.IsVisited(reqKey) {
+				continue
+			}
 		}
 		originReq := req
 
@@ -156,8 +158,8 @@ func singleRun(w *worker) {
 			}
 			w.AfterSave(context.Background(), parseResult)
 		}
-		if w.UseVist {
-			w.Vister.SetVisitted(reqKey, w.VisterTTL)
+		if w.UseVisit {
+			w.Visiter.SetVisitted(reqKey, w.VisiterTTL)
 		}
 
 	}
