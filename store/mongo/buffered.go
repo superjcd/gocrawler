@@ -14,7 +14,7 @@ import (
 	"github.com/superjcd/gocrawler/store"
 )
 
-type BufferedMongoStorage struct {
+type bufferedMongoStorage struct {
 	L            *sync.Mutex
 	Cli          *qmgo.QmgoClient
 	buf          []parser.ParseItem
@@ -23,54 +23,21 @@ type BufferedMongoStorage struct {
 	taskKeyField string
 }
 
-type BufferedMongoStorageOption func(s *BufferedMongoStorage)
+var _ store.Storage = (*bufferedMongoStorage)(nil)
+
+type BufferedMongoStorageOption func(s *bufferedMongoStorage)
 
 func WithRedisCounter(r_config redis.Options, ttl time.Duration, counterPrefix, keyField string) BufferedMongoStorageOption {
-	return func(s *BufferedMongoStorage) {
+	return func(s *bufferedMongoStorage) {
 		redisCounter := counter.NewRedisTaskCounters(r_config, ttl, counterPrefix, keyField)
 		s.counter = redisCounter
 		s.taskKeyField = keyField
 	}
 }
 
-type MongoStorage struct {
-	Cli *qmgo.QmgoClient
-}
-
-var _ store.Storage = (*MongoStorage)(nil)
-
 const DEFAULT_BUFFER_SIZE = 100
 
-func NewMongoStorage(uri, database, collection string) *MongoStorage {
-	ctx := context.Background()
-	cli, err := qmgo.Open(ctx, &qmgo.Config{Uri: uri,
-		Database: database,
-		Coll:     collection}) // counter
-	if err != nil {
-		panic(err)
-	}
-
-	return &MongoStorage{Cli: cli}
-}
-
-func (s *MongoStorage) Save(items ...parser.ParseItem) error {
-	var result *qmgo.InsertOneResult
-	var err error
-	for _, item := range items {
-
-		result, err = s.Cli.Collection.InsertOne(context.Background(), item)
-		if err == nil {
-			log.Println("[store]insert one ok")
-		}
-	}
-	if err != nil {
-		return err
-	}
-	_ = result
-	return nil
-}
-
-func NewBufferedMongoStorage(uri, database, collection string, bufferSize int, autoFlushInterval time.Duration, opts ...BufferedMongoStorageOption) *BufferedMongoStorage {
+func NewBufferedMongoStorage(uri, database, collection string, bufferSize int, autoFlushInterval time.Duration, opts ...BufferedMongoStorageOption) *bufferedMongoStorage {
 	ctx := context.Background()
 	cli, err := qmgo.Open(ctx, &qmgo.Config{Uri: uri,
 		Database: database,
@@ -87,7 +54,7 @@ func NewBufferedMongoStorage(uri, database, collection string, bufferSize int, a
 
 	var l sync.Mutex
 
-	store := &BufferedMongoStorage{Cli: cli, L: &l, bufSize: bufferSize, buf: buf}
+	store := &bufferedMongoStorage{Cli: cli, L: &l, bufSize: bufferSize, buf: buf}
 	for _, option := range opts {
 		option(store)
 	}
@@ -106,7 +73,7 @@ func NewBufferedMongoStorage(uri, database, collection string, bufferSize int, a
 
 }
 
-func (s *BufferedMongoStorage) Save(items ...parser.ParseItem) error {
+func (s *bufferedMongoStorage) Save(items ...parser.ParseItem) error {
 	s.L.Lock()
 	defer s.L.Unlock()
 
@@ -129,7 +96,7 @@ func (s *BufferedMongoStorage) Save(items ...parser.ParseItem) error {
 	return nil
 }
 
-func (s *BufferedMongoStorage) flush() error {
+func (s *bufferedMongoStorage) flush() error {
 	if len(s.buf) == 0 {
 		return nil
 	}
@@ -148,7 +115,7 @@ func (s *BufferedMongoStorage) flush() error {
 	return nil
 }
 
-func (s *BufferedMongoStorage) collectTaskCounts(buf []parser.ParseItem) (tc map[string]int64) {
+func (s *bufferedMongoStorage) collectTaskCounts(buf []parser.ParseItem) (tc map[string]int64) {
 	tc = make(map[string]int64, 128)
 	for _, item := range buf {
 		if taskId, ok := item[s.taskKeyField]; !ok {
@@ -166,13 +133,13 @@ func (s *BufferedMongoStorage) collectTaskCounts(buf []parser.ParseItem) (tc map
 	return tc
 }
 
-func (s *BufferedMongoStorage) count(tc map[string]int64) {
+func (s *bufferedMongoStorage) count(tc map[string]int64) {
 	for k, v := range tc {
 		s.counter.Incr(k, v)
 	}
 }
 
-func (s *BufferedMongoStorage) insertManyTOMongo(items ...parser.ParseItem) error {
+func (s *bufferedMongoStorage) insertManyTOMongo(items ...parser.ParseItem) error {
 	if result, err := s.Cli.Collection.InsertMany(context.Background(), items); err != nil {
 		return err
 	} else {
@@ -181,7 +148,7 @@ func (s *BufferedMongoStorage) insertManyTOMongo(items ...parser.ParseItem) erro
 	}
 }
 
-func (s *BufferedMongoStorage) Close() error {
+func (s *bufferedMongoStorage) Close() error {
 	s.flush()
 	return s.Cli.Close(context.Background())
 }

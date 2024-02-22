@@ -16,7 +16,6 @@ const (
 
 type nsqScheduler struct {
 	workerCh       chan *request.Request
-	retryCh        chan *request.Request
 	nsqLookupdAddr string
 	topicName      string
 	channelName    string
@@ -74,10 +73,8 @@ func NewNsqScheduler(topicName, channelName, nsqAddr, nsqLookupdAddr string) *ns
 	}
 
 	workerCh := make(chan *request.Request)
-	retryCh := make(chan *request.Request)
 
 	return &nsqScheduler{workerCh: workerCh,
-		retryCh:        retryCh,
 		topicName:      topicName,
 		channelName:    channelName,
 		nsqLookupdAddr: nsqLookupdAddr,

@@ -27,6 +27,7 @@ type options struct {
 
 	BeforeRequestHook BeforeRequestHook
 	BeforeSaveHook    BeforeSaveHook
+	AfterSaveHook     AfterSaveHook
 }
 
 // lifecycle hooks
@@ -34,6 +35,8 @@ type options struct {
 type BeforeRequestHook func(context.Context, *request.Request) error
 
 type BeforeSaveHook func(context.Context, *parser.ParseResult) error
+
+type AfterSaveHook func(context.Context, *parser.ParseResult) error
 
 type Option func(opts *options)
 
@@ -97,5 +100,11 @@ func WithBeforeRequestHook(h BeforeRequestHook) Option {
 func WithBeforeSaveHook(h BeforeSaveHook) Option {
 	return func(opts *options) {
 		opts.BeforeSaveHook = h
+	}
+}
+
+func WithAfterSaveHook(h AfterSaveHook) Option {
+	return func(opts *options) {
+		opts.AfterSaveHook = h
 	}
 }

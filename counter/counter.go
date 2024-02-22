@@ -20,31 +20,31 @@ const (
 	maxRetries = 1000
 )
 
-type RedisTaskCounters struct {
+type redisTaskCounters struct {
 	prefix       string
 	taskKeyField string
 	RCli         *redis.Client
 	TTL          time.Duration
 }
 
-func NewRedisTaskCounters(r_config redis.Options, ttl time.Duration, counterPrefix, taskField string) *RedisTaskCounters {
+func NewRedisTaskCounters(r_config redis.Options, ttl time.Duration, counterPrefix, taskField string) *redisTaskCounters {
 	if !strings.HasSuffix(counterPrefix, ":") {
 		counterPrefix = counterPrefix + ":"
 	}
-	rc := &RedisTaskCounters{TTL: ttl, prefix: counterPrefix, taskKeyField: taskField}
+	rc := &redisTaskCounters{TTL: ttl, prefix: counterPrefix, taskKeyField: taskField}
 	rc.RCli = redis.NewClient(&r_config)
 	return rc
 }
 
-func (c *RedisTaskCounters) GetCounterPrefix() string {
+func (c *redisTaskCounters) GetCounterPrefix() string {
 	return c.prefix
 }
 
-func (c *RedisTaskCounters) GetTaskIdField() string {
+func (c *redisTaskCounters) GetTaskIdField() string {
 	return c.taskKeyField
 }
 
-func (c *RedisTaskCounters) Incr(key string, increment int64) {
+func (c *redisTaskCounters) Incr(key string, increment int64) {
 	// transaction
 	key = c.prefix + key
 	txf := func(tx *redis.Tx) error {

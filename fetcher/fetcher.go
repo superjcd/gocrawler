@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/CUCyber/ja3transport"
 	"github.com/superjcd/gocrawler/cookie"
 	"github.com/superjcd/gocrawler/proxy"
 	"github.com/superjcd/gocrawler/request"
@@ -23,8 +22,7 @@ type fectcher struct {
 }
 
 func NewFectcher(timeOut time.Duration, proxyGetter proxy.ProxyGetter, cookieGetter cookie.CoookieGetter, uaGetter ua.UaGetter) *fectcher {
-	// tr := http.DefaultTransport.(*http.Transport)
-	tr, _ := ja3transport.NewTransport("771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53-10,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0")
+	tr := http.DefaultTransport.(*http.Transport)
 	tr.Proxy = proxyGetter.Get
 	tr.DisableKeepAlives = true
 	client := &http.Client{Transport: tr, Timeout: timeOut}

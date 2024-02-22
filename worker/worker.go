@@ -43,7 +43,7 @@ func NewWorker(workers, retries int, saveRequestData bool, maxRunTime time.Durat
 
 func (w *worker) BeforeRequest(ctx context.Context, req *request.Request) {
 	if w.BeforeRequestHook != nil {
-		err := w.BeforeRequestHook(ctx, req) 
+		err := w.BeforeRequestHook(ctx, req)
 		if err != nil {
 			panic(err)
 		}
@@ -53,6 +53,16 @@ func (w *worker) BeforeRequest(ctx context.Context, req *request.Request) {
 func (w *worker) BeforeSave(ctx context.Context, par *parser.ParseResult) {
 	if w.BeforeSaveHook != nil {
 		err := w.BeforeSaveHook(ctx, par)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+}
+
+func (w *worker) AfterSave(ctx context.Context, par *parser.ParseResult) {
+	if w.AfterSaveHook != nil {
+		err := w.AfterSaveHook(ctx, par)
 		if err != nil {
 			panic(err)
 		}
@@ -140,12 +150,11 @@ func singleRun(w *worker) {
 			}
 
 			w.BeforeSave(context.Background(), parseResult)
-
 			if err := w.Store.Save(parseResult.Items...); err != nil {
 				log.Printf("item saved failed err: %v;items: ", err)
 				continue
 			}
-
+			w.AfterSave(context.Background(), parseResult)
 		}
 		if w.UseVist {
 			w.Vister.SetVisitted(reqKey, w.VisterTTL)

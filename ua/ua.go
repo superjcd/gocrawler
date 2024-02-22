@@ -9,7 +9,7 @@ type UaGetter interface {
 type roundRobinUA struct{}
 
 func (u *roundRobinUA) Get() (string, error) {
-	return DEFAULT_UAS[rand.Intn(len(DEFAULT_UAS))], nil
+	return DEFAULT_UAS[rand.Intn(len(DEFAULT_UAS)-1)], nil
 }
 
 func NewDefaultUAGetter() *roundRobinUA {
