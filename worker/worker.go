@@ -6,12 +6,14 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/superjcd/gocrawler/health"
 	"github.com/superjcd/gocrawler/parser"
 	"github.com/superjcd/gocrawler/request"
 	"github.com/superjcd/gocrawler/scheduler/nsq"
 )
 
 type Worker interface {
+	health.HealthChecker
 	Run()
 	BeforeRequest(context.Context, *request.Request)
 	BeforeSave(context.Context, *parser.ParseResult)
@@ -163,4 +165,13 @@ func singleRun(w *worker) {
 		}
 
 	}
+}
+
+func (w *worker) Health() (bool, map[string]any) {
+	health := true
+	healthDetails := map[string]any{}
+	fetcherHealthStatus, fetcherHealthDetails := w.Fetcher.Health()
+	health = health && fetcherHealthStatus
+	healthDetails["fetcher"] = fetcherHealthDetails
+	return health, healthDetails
 }

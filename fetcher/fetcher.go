@@ -6,20 +6,27 @@ import (
 	"time"
 
 	"github.com/superjcd/gocrawler/cookie"
+	"github.com/superjcd/gocrawler/health"
 	"github.com/superjcd/gocrawler/proxy"
 	"github.com/superjcd/gocrawler/request"
 	"github.com/superjcd/gocrawler/ua"
 )
 
+// 考虑添加一个health checkerm, 添加一个HeathCheck
+
 type Fetcher interface {
+	health.HealthChecker
 	Fetch(req *request.Request) (*http.Response, error)
 }
 
 type fectcher struct {
 	Cli          *http.Client
 	CookieGetter cookie.CoookieGetter
+	ProxyGetter  proxy.ProxyGetter
 	UaGetter     ua.UaGetter
 }
+
+var _ Fetcher = (*fectcher)(nil)
 
 func NewFectcher(timeOut time.Duration, proxyGetter proxy.ProxyGetter, cookieGetter cookie.CoookieGetter, uaGetter ua.UaGetter) *fectcher {
 	tr := http.DefaultTransport.(*http.Transport)
@@ -29,6 +36,7 @@ func NewFectcher(timeOut time.Duration, proxyGetter proxy.ProxyGetter, cookieGet
 
 	f := &fectcher{
 		Cli:          client,
+		ProxyGetter:  proxyGetter,
 		CookieGetter: cookieGetter,
 		UaGetter:     uaGetter,
 	}
@@ -60,4 +68,14 @@ func (f *fectcher) Fetch(r *request.Request) (resp *http.Response, err error) {
 	}
 
 	return
+}
+
+func (f *fectcher) Health() (bool, map[string]any) {
+	// internet health
+	health := true
+	healthDetails := map[string]any{}
+	cookieHealthStatus, cookieHealthDetails := f.CookieGetter.Health()
+	health = health && cookieHealthStatus
+	healthDetails["cookies"] = cookieHealthDetails
+	return health, healthDetails
 }
