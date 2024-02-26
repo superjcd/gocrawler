@@ -14,12 +14,16 @@ import (
 
 type Worker interface {
 	health.HealthChecker
+	Name() string
+	ID() int
 	Run()
 	BeforeRequest(context.Context, *request.Request)
 	BeforeSave(context.Context, *parser.ParseResult)
 }
 
 type worker struct {
+	name            string
+	id              int
 	Workers         int
 	MaxRetries      int
 	SaveRequestData bool
@@ -29,13 +33,13 @@ type worker struct {
 
 var _ Worker = (*worker)(nil)
 
-func NewWorker(workers, retries int, saveRequestData bool, maxRunTime time.Duration, opts ...Option) *worker {
+func NewWorker(name string, id, workers, retries int, saveRequestData bool, maxRunTime time.Duration, opts ...Option) *worker {
 	options := options{}
 
 	for _, opt := range opts {
 		opt(&options)
 	}
-	w := &worker{Workers: workers, MaxRetries: retries, SaveRequestData: saveRequestData, MaxRunTime: maxRunTime}
+	w := &worker{name: name, id: id, Workers: workers, MaxRetries: retries, SaveRequestData: saveRequestData, MaxRunTime: maxRunTime}
 	w.options = options
 
 	go w.Scheduler.Schedule()
@@ -167,6 +171,12 @@ func singleRun(w *worker) {
 	}
 }
 
+func (w *worker) Name() string {
+	return w.name
+}
+func (w *worker) ID() int {
+	return w.id
+}
 func (w *worker) Health() (bool, map[string]any) {
 	health := true
 	healthDetails := map[string]any{}
