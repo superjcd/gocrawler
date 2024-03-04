@@ -223,8 +223,9 @@ func (w *worker) retry(req, originReq *request.Request) {
 	if req.Retry < w.MaxRetries {
 		originReq.Retry += 1
 		w.Scheduler.Push(nsq.NSQ_PUSH, originReq)
+	} else {
+		log.Printf("too many retries for request:%s, exceed max retries: %d", req.URL, w.MaxRetries)
 	}
-	log.Printf("too many retries for request:%s, exceed max retries: %d", req.URL, w.MaxRetries)
 }
 
 func (w *worker) dealSignal(sig Signal, err error, req, originReq *request.Request) int {
@@ -233,6 +234,9 @@ func (w *worker) dealSignal(sig Signal, err error, req, originReq *request.Reque
 	}
 	if sig&ContinueWithRetrySignal != 0 {
 		w.retry(req, originReq)
+		return ContinueLoop
+	}
+	if sig&ContinueWithoutRetrySignal != 0 {
 		return ContinueLoop
 	}
 	if sig&BreakWithPanicSignal != 0 {
