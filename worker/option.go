@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"net/http"
 	"time"
 
 	"github.com/superjcd/gocrawler/fetcher"
@@ -16,9 +17,9 @@ import (
 type options struct {
 	Scheduler         scheduler.Scheduler
 	Limiter           *rate.Limiter
-	UseVisit           bool
-	Visiter            visit.Visit
-	VisiterTTL         time.Duration
+	UseVisit          bool
+	Visiter           visit.Visit
+	VisiterTTL        time.Duration
 	Fetcher           fetcher.Fetcher
 	Parser            parser.Parser
 	Store             store.Storage
@@ -26,17 +27,20 @@ type options struct {
 	AddtionalHashKeys []string
 
 	BeforeRequestHook BeforeRequestHook
+	AfterRequestHook  AfterRequestHook
 	BeforeSaveHook    BeforeSaveHook
 	AfterSaveHook     AfterSaveHook
 }
 
 // lifecycle hooks
 
-type BeforeRequestHook func(context.Context, *request.Request) error
+type BeforeRequestHook func(context.Context, *request.Request) (Signal, error)
 
-type BeforeSaveHook func(context.Context, *parser.ParseResult) error
+type AfterRequestHook func(context.Context, *http.Response) (Signal, error)
 
-type AfterSaveHook func(context.Context, *parser.ParseResult) error
+type BeforeSaveHook func(context.Context, *parser.ParseResult) (Signal, error)
+
+type AfterSaveHook func(context.Context, *parser.ParseResult) (Signal, error)
 
 type Option func(opts *options)
 
@@ -94,6 +98,12 @@ func WithAddtionalHashKeys(keys []string) Option {
 func WithBeforeRequestHook(h BeforeRequestHook) Option {
 	return func(opts *options) {
 		opts.BeforeRequestHook = h
+	}
+}
+
+func WithAfterRequestHook(h AfterRequestHook) Option {
+	return func(opts *options) {
+		opts.AfterRequestHook = h
 	}
 }
 

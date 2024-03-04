@@ -119,7 +119,7 @@ func (s *bufferedMongoStorage) collectTaskCounts(buf []parser.ParseItem) (tc map
 	tc = make(map[string]int64, 128)
 	for _, item := range buf {
 		if taskId, ok := item[s.taskKeyField]; !ok {
-			panic(fmt.Errorf("`%s` not found in Parseitem, if you want to use the task counter, then `%s` embeded must be stuffed in the ParsedItem", s.taskKeyField, s.taskKeyField))
+			panic(fmt.Errorf("`%s` not found in Parsed Item, if you want to use the task counter, then `%s` embeded must be stuffed in the ParsedItem", s.taskKeyField, s.taskKeyField))
 		} else {
 			switch v := taskId.(type) {
 			case string:

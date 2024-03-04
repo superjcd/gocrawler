@@ -16,8 +16,10 @@ type Worker interface {
 	health.HealthChecker
 	Name() string
 	Run()
-	BeforeRequest(context.Context, *request.Request)
-	BeforeSave(context.Context, *parser.ParseResult)
+	BeforeRequest(context.Context, *request.Request) (Signal, error)
+	AfterRequest(context.Context, *http.Response) (Signal, error)
+	BeforeSave(context.Context, *parser.ParseResult) (Signal, error)
+	AfterSave(context.Context, *parser.ParseResult) (Signal, error)
 }
 
 type worker struct {
@@ -45,33 +47,41 @@ func NewWorker(name string, workers, retries int, saveRequestData bool, maxRunTi
 	return w
 }
 
-func (w *worker) BeforeRequest(ctx context.Context, req *request.Request) {
+func (w *worker) BeforeRequest(ctx context.Context, req *request.Request) (Signal, error) {
+	var sig Signal
 	if w.BeforeRequestHook != nil {
-		err := w.BeforeRequestHook(ctx, req)
-		if err != nil {
-			panic(err)
-		}
+		return w.BeforeRequestHook(ctx, req)
 	}
+	sig |= DummySignal
+	return sig, nil
 }
 
-func (w *worker) BeforeSave(ctx context.Context, par *parser.ParseResult) {
+func (w *worker) AfterRequest(ctx context.Context, resp *http.Response) (Signal, error) {
+	var sig Signal
+	if w.AfterRequestHook != nil {
+		return w.AfterRequestHook(ctx, resp)
+	}
+	sig |= DummySignal
+	return sig, nil
+}
+
+func (w *worker) BeforeSave(ctx context.Context, par *parser.ParseResult) (Signal, error) {
+	var sig Signal
 	if w.BeforeSaveHook != nil {
-		err := w.BeforeSaveHook(ctx, par)
-		if err != nil {
-			panic(err)
-		}
+		return w.BeforeSaveHook(ctx, par)
 	}
-
+	sig |= DummySignal
+	return sig, nil
 }
 
-func (w *worker) AfterSave(ctx context.Context, par *parser.ParseResult) {
-	if w.AfterSaveHook != nil {
-		err := w.AfterSaveHook(ctx, par)
-		if err != nil {
-			panic(err)
-		}
-	}
+func (w *worker) AfterSave(ctx context.Context, par *parser.ParseResult) (Signal, error) {
+	var sig Signal
 
+	if w.AfterSaveHook != nil {
+		return w.AfterSaveHook(ctx, par)
+	}
+	sig |= DummySignal
+	return sig, nil
 }
 
 func (w *worker) Run() {
@@ -88,6 +98,10 @@ func (w *worker) Run() {
 }
 
 func singleRun(w *worker) {
+	var sig Signal
+	var err error
+
+Loop:
 	for {
 		w.Limiter.Wait(context.TODO())
 		req := w.Scheduler.Pull()
@@ -108,33 +122,42 @@ func singleRun(w *worker) {
 		}
 		originReq := req
 
-		// Fetch
-		w.BeforeRequest(context.Background(), req)
-		resp, err := w.Fetcher.Fetch(req)
+		sig, err = w.BeforeRequest(context.Background(), req)
 
+		switch w.dealSignal(sig, err, req, originReq) {
+		case ContinueLoop:
+			continue Loop
+		case BreakLoop:
+			break Loop
+		}
+
+		resp, err := w.Fetcher.Fetch(req)
 		if err != nil {
-			log.Printf("request failed: %v", err)
-			if req.Retry < w.MaxRetries {
-				originReq.Retry += 1
-				w.Scheduler.Push(nsq.NSQ_PUSH, originReq)
-			} else {
-				log.Printf("too many fetch failures for request:%s, exceed max retries: %d", req.URL, w.MaxRetries)
-			}
+			log.Printf("fetch failed: %v", err)
+			w.retry(req, originReq)
 			continue
 		}
 
-		if resp.StatusCode != http.StatusOK {
-			originReq.Retry += 1
-			w.Scheduler.Push(nsq.NSQ_PUSH, originReq)
-			continue
+		if w.AfterRequestHook != nil {
+			sig, err = w.AfterRequestHook(context.Background(), resp)
+			switch w.dealSignal(sig, err, req, originReq) {
+			case ContinueLoop:
+				continue Loop
+			case BreakLoop:
+				break Loop
+			}
+		} else {
+			if resp.StatusCode != http.StatusOK {
+				w.retry(req, originReq)
+				continue
+			}
 		}
 
 		// Parse
 		parseResult, err := w.Parser.Parse(resp)
 		if err != nil {
 			log.Printf("parse failed for request: %s, error: %v", req.URL, err)
-			originReq.Retry += 1
-			w.Scheduler.Push(nsq.NSQ_PUSH, originReq)
+			w.retry(req, originReq)
 			continue
 		}
 
@@ -155,12 +178,26 @@ func singleRun(w *worker) {
 				}
 			}
 
-			w.BeforeSave(context.Background(), parseResult)
+			sig, err = w.BeforeSave(context.Background(), parseResult)
+			switch w.dealSignal(sig, err, req, originReq) {
+			case ContinueLoop:
+				continue Loop
+			case BreakLoop:
+				break Loop
+			}
+
 			if err := w.Store.Save(parseResult.Items...); err != nil {
 				log.Printf("item saved failed err: %v;items: ", err)
 				continue
 			}
-			w.AfterSave(context.Background(), parseResult)
+
+			sig, err = w.AfterSave(context.Background(), parseResult)
+			switch w.dealSignal(sig, err, req, originReq) {
+			case ContinueLoop:
+				continue Loop
+			case BreakLoop:
+				break Loop
+			}
 		}
 		if w.UseVisit {
 			w.Visiter.SetVisitted(reqKey, w.VisiterTTL)
@@ -180,4 +217,29 @@ func (w *worker) Health() (bool, map[string]any) {
 	health = health && fetcherHealthStatus
 	healthDetails["fetcher"] = fetcherHealthDetails
 	return health, healthDetails
+}
+
+func (w *worker) retry(req, originReq *request.Request) {
+	if req.Retry < w.MaxRetries {
+		originReq.Retry += 1
+		w.Scheduler.Push(nsq.NSQ_PUSH, originReq)
+	}
+	log.Printf("too many retries for request:%s, exceed max retries: %d", req.URL, w.MaxRetries)
+}
+
+func (w *worker) dealSignal(sig Signal, err error, req, originReq *request.Request) int {
+	if sig&DummySignal != 0 {
+		return KeepGoing
+	}
+	if sig&ContinueWithRetrySignal != 0 {
+		w.retry(req, originReq)
+		return ContinueLoop
+	}
+	if sig&BreakWithPanicSignal != 0 {
+		panic(err)
+	}
+	if sig&BreakWithoutPanicSignal != 0 {
+		return BreakLoop
+	}
+	return KeepGoing
 }
