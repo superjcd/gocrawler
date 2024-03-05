@@ -13,8 +13,6 @@ import (
 	"github.com/superjcd/gocrawler/ua"
 )
 
-// 考虑添加一个health checkerm, 添加一个HeathCheck
-
 type Fetcher interface {
 	health.HealthChecker
 	Fetch(ctx context.Context, req *request.Request) (*http.Response, error)
@@ -46,7 +44,7 @@ func NewFectcher(timeOut time.Duration, proxyGetter proxy.ProxyGetter, cookieGet
 }
 
 func (f *fectcher) Fetch(ctx context.Context, r *request.Request) (resp *http.Response, err error) {
-	jar, err := f.CookieGetter.Get()
+	jar, err := f.CookieGetter.Get(ctx)
 	if err != nil {
 		return nil, err
 	}

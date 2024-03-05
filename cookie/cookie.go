@@ -1,6 +1,7 @@
 package cookie
 
 import (
+	"context"
 	"net/http/cookiejar"
 
 	"github.com/superjcd/gocrawler/health"
@@ -8,5 +9,5 @@ import (
 
 type CoookieGetter interface {
 	health.HealthChecker
-	Get() (*cookiejar.Jar, error)
+	Get(context.Context) (*cookiejar.Jar, error)
 }
