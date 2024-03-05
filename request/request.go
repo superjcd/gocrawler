@@ -13,6 +13,8 @@ type Request struct {
 	Data   map[string]string
 }
 
+type RequestDataCtxKey struct{}
+
 func (r *Request) Hash(hashFields ...string) string {
 	components := make([][]byte, 2+len(hashFields))
 	components[0] = []byte(r.URL)

@@ -73,7 +73,7 @@ func NewBufferedMongoStorage(uri, database, collection string, bufferSize int, a
 
 }
 
-func (s *bufferedMongoStorage) Save(items ...parser.ParseItem) error {
+func (s *bufferedMongoStorage) Save(ctx context.Context, items ...parser.ParseItem) error {
 	s.L.Lock()
 	defer s.L.Unlock()
 

@@ -1,6 +1,7 @@
 package fetcher
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"time"
@@ -16,7 +17,7 @@ import (
 
 type Fetcher interface {
 	health.HealthChecker
-	Fetch(req *request.Request) (*http.Response, error)
+	Fetch(ctx context.Context, req *request.Request) (*http.Response, error)
 }
 
 type fectcher struct {
@@ -44,7 +45,7 @@ func NewFectcher(timeOut time.Duration, proxyGetter proxy.ProxyGetter, cookieGet
 	return f
 }
 
-func (f *fectcher) Fetch(r *request.Request) (resp *http.Response, err error) {
+func (f *fectcher) Fetch(ctx context.Context, r *request.Request) (resp *http.Response, err error) {
 	jar, err := f.CookieGetter.Get()
 	if err != nil {
 		return nil, err
@@ -54,7 +55,7 @@ func (f *fectcher) Fetch(r *request.Request) (resp *http.Response, err error) {
 	if err != nil {
 		return nil, fmt.Errorf("get url failed: %w", err)
 	}
-	ua, err := f.UaGetter.Get()
+	ua, err := f.UaGetter.Get(ctx)
 
 	if err != nil {
 		return nil, fmt.Errorf("get ua failed: %w", err)

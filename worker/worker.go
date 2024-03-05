@@ -108,6 +108,7 @@ Loop:
 		if req == nil {
 			continue
 		}
+
 		var reqKey string
 		if w.UseVisit {
 			if w.AddtionalHashKeys == nil {
@@ -117,12 +118,15 @@ Loop:
 			}
 
 			if w.Visiter.IsVisited(reqKey) {
-				continue
+				continue Loop
 			}
 		}
 		originReq := req
 
-		sig, err = w.BeforeRequest(context.Background(), req)
+		ctx := context.Background()
+		ctx = context.WithValue(ctx, request.RequestDataCtxKey{}, req.Data)
+
+		sig, err = w.BeforeRequest(ctx, req)
 
 		switch w.dealSignal(sig, err, req, originReq) {
 		case ContinueLoop:
@@ -131,7 +135,7 @@ Loop:
 			break Loop
 		}
 
-		resp, err := w.Fetcher.Fetch(req)
+		resp, err := w.Fetcher.Fetch(ctx, req)
 		if err != nil {
 			log.Printf("fetch failed: %v", err)
 			w.retry(req, originReq)
@@ -139,7 +143,7 @@ Loop:
 		}
 
 		if w.AfterRequestHook != nil {
-			sig, err = w.AfterRequestHook(context.Background(), resp)
+			sig, err = w.AfterRequestHook(ctx, resp)
 			switch w.dealSignal(sig, err, req, originReq) {
 			case ContinueLoop:
 				continue Loop
@@ -154,7 +158,7 @@ Loop:
 		}
 
 		// Parse
-		parseResult, err := w.Parser.Parse(resp)
+		parseResult, err := w.Parser.Parse(ctx, resp)
 		if err != nil {
 			log.Printf("parse failed for request: %s, error: %v", req.URL, err)
 			w.retry(req, originReq)
@@ -178,7 +182,7 @@ Loop:
 				}
 			}
 
-			sig, err = w.BeforeSave(context.Background(), parseResult)
+			sig, err = w.BeforeSave(ctx, parseResult)
 			switch w.dealSignal(sig, err, req, originReq) {
 			case ContinueLoop:
 				continue Loop
@@ -186,12 +190,12 @@ Loop:
 				break Loop
 			}
 
-			if err := w.Store.Save(parseResult.Items...); err != nil {
+			if err := w.Store.Save(ctx, parseResult.Items...); err != nil {
 				log.Printf("item saved failed err: %v;items: ", err)
 				continue
 			}
 
-			sig, err = w.AfterSave(context.Background(), parseResult)
+			sig, err = w.AfterSave(ctx, parseResult)
 			switch w.dealSignal(sig, err, req, originReq) {
 			case ContinueLoop:
 				continue Loop

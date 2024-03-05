@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/superjcd/gocrawler/request"
@@ -14,5 +15,5 @@ type ParseResult struct {
 }
 
 type Parser interface {
-	Parse(resp *http.Response) (*ParseResult, error)
+	Parse(ctx context.Context, resp *http.Response) (*ParseResult, error)
 }

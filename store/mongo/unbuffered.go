@@ -27,7 +27,7 @@ func NewMongoStorage(uri, database, collection string) *mongoStorage {
 	return &mongoStorage{Cli: cli}
 }
 
-func (s *mongoStorage) Save(items ...parser.ParseItem) error {
+func (s *mongoStorage) Save(ctx context.Context, items ...parser.ParseItem) error {
 	var result *qmgo.InsertOneResult
 	var err error
 	for _, item := range items {

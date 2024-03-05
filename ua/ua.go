@@ -1,14 +1,17 @@
 package ua
 
-import "math/rand"
+import (
+	"context"
+	"math/rand"
+)
 
 type UaGetter interface {
-	Get() (string, error)
+	Get(context.Context) (string, error)
 }
 
 type roundRobinUA struct{}
 
-func (u *roundRobinUA) Get() (string, error) {
+func (u *roundRobinUA) Get(ctx context.Context) (string, error) {
 	return DEFAULT_UAS[rand.Intn(len(DEFAULT_UAS)-1)], nil
 }
 
