@@ -21,6 +21,7 @@ type nsqScheduler struct {
 	channelName    string
 	nsqConsumer    *nsq.Consumer
 	nsqProducer    *nsq.Producer
+	options
 }
 
 type nsqMessageHandler struct {

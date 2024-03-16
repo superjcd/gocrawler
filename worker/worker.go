@@ -168,7 +168,13 @@ Loop:
 		// New Requests
 		if parseResult.Requests != nil && len(parseResult.Requests) > 0 {
 			for _, req := range parseResult.Requests {
-				w.Scheduler.Push(nsq.NSQ_PUSH, req)
+				if req.SchName == "" {
+					w.Scheduler.Push(nsq.NSQ_PUSH, req)
+				} else if w.Scheduler.OtherSchedulers != nil {
+					if otherScheduler, ok := w.Scheduler.OtherSchedulers[name]; ok {
+						otherScheduler.Push(nsq.NSQ_PUSH, req)
+					}
+				}
 			}
 		}
 
