@@ -35,11 +35,6 @@ func (h *nsqMessageHandler) HandleMessage(m *nsq.Message) error {
 	}
 
 	processMessage := func(mb []byte) error {
-		// just for debugging
-		// count++
-		// var err error
-		// fmt.Println(strconv.Itoa(count) + ":" + string(mb))
-
 		var req request.Request
 		if err = json.Unmarshal(mb, &req); err != nil {
 			return err
@@ -116,6 +111,10 @@ func (s *nsqScheduler) Schedule() {
 		log.Fatal(err)
 	}
 
+}
+
+func (s *nsqScheduler) NamedSchedulers() map[string]scheduler.Scheduler {
+	return s.namedScheduler
 }
 
 func (s *nsqScheduler) Stop() {

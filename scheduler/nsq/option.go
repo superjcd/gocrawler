@@ -1,13 +1,15 @@
 package nsq
 
+import "github.com/superjcd/gocrawler/scheduler"
+
 type options struct {
-	OtherSchedulers map[string]*nsqScheduler
+	namedScheduler map[string]scheduler.Scheduler
 }
 
 type Option func(opts *options)
 
-func WithOtherScheduler(name string, scheduler *nsqScheduler) Option {
+func WithNamedSchedulers(name string, scheduler *nsqScheduler) Option {
 	return func(opts *options) {
-		opts.OtherSchedulers[name] = scheduler
+		opts.namedScheduler[name] = scheduler
 	}
 }

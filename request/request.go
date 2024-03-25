@@ -7,11 +7,11 @@ import (
 )
 
 type Request struct {
-	URL     string
-	Method  string
-	Retry   int
-	Data    map[string]string // optional, will be passed to context if exists
-	SchName string            // optional if want to send to annother shcheduler
+	URL           string
+	Method        string
+	Retry         int
+	Data          map[string]string // optional, will be passed to context if exists
+	SchedulerName string            // optional if want to send to annother shcheduler
 }
 
 type RequestDataCtxKey struct{}
