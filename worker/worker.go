@@ -9,7 +9,7 @@ import (
 	"github.com/superjcd/gocrawler/health"
 	"github.com/superjcd/gocrawler/parser"
 	"github.com/superjcd/gocrawler/request"
-	"github.com/superjcd/gocrawler/scheduler/nsq"
+	"github.com/superjcd/gocrawler/scheduler"
 )
 
 type Worker interface {
@@ -168,18 +168,12 @@ Loop:
 		// New Requests
 		if parseResult.Requests != nil && len(parseResult.Requests) > 0 {
 			for _, req := range parseResult.Requests {
-				if req.SchedulerName == "" {
-					w.Scheduler.Push(nsq.NSQ_PUSH, req)
+				if !req.IsSecondary {
+					w.Scheduler.Push(scheduler.TYP_PUSH_SCHEDULER, req)
 					continue
 				}
-				if namedScheduler := w.Scheduler.NamedSchedulers(); namedScheduler != nil {
-					if scheduler, ok := namedScheduler[req.SchedulerName]; ok {
-						// switch scheduler.(type) {
-						// case nsq.nsqScheduler:
-						// 	scheduler.Push(nsq.NSQ_PUSH, req)
-						// }
-						scheduler.Push(nsq.NSQ_PUSH, req)
-					}
+				if secondScheduler := w.Scheduler.SecondScheduler(); secondScheduler != nil {
+					secondScheduler.Push(scheduler.TYP_PUSH_SCHEDULER, req)
 				}
 			}
 		}
@@ -238,7 +232,7 @@ func (w *worker) Health() (bool, map[string]any) {
 func (w *worker) retry(req, originReq *request.Request) {
 	if req.Retry < w.MaxRetries {
 		originReq.Retry += 1
-		w.Scheduler.Push(nsq.NSQ_PUSH, originReq)
+		w.Scheduler.Push(scheduler.TYP_PUSH_SCHEDULER, originReq)
 	} else {
 		log.Printf("too many retries for request:%s, exceed max retries: %d", req.URL, w.MaxRetries)
 	}

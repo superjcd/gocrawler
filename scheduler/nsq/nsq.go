@@ -9,11 +9,6 @@ import (
 	"github.com/superjcd/gocrawler/scheduler"
 )
 
-const (
-	DIRECT_PUSH = iota
-	NSQ_PUSH
-)
-
 type nsqScheduler struct {
 	workerCh       chan *request.Request
 	nsqLookupdAddr string
@@ -40,7 +35,7 @@ func (h *nsqMessageHandler) HandleMessage(m *nsq.Message) error {
 			return err
 
 		}
-		h.s.Push(DIRECT_PUSH, &req)
+		h.s.Push(scheduler.TYP_PUSH_CHANNEL, &req)
 		return nil
 	}
 
@@ -81,6 +76,7 @@ func NewNsqScheduler(topicName, channelName, nsqAddr, nsqLookupdAddr string, opt
 		nsqLookupdAddr: nsqLookupdAddr,
 		nsqConsumer:    nsqConsumer,
 		nsqProducer:    nsqProducer,
+		options:        options,
 	}
 }
 
@@ -91,11 +87,11 @@ func (s *nsqScheduler) Pull() *request.Request {
 
 func (s *nsqScheduler) Push(typ int, reqs ...*request.Request) {
 	switch typ {
-	case DIRECT_PUSH:
+	case scheduler.TYP_PUSH_CHANNEL:
 		for _, req := range reqs {
 			s.workerCh <- req
 		}
-	case NSQ_PUSH:
+	case scheduler.TYP_PUSH_SCHEDULER:
 		for _, req := range reqs {
 			msg, err := json.Marshal(req)
 			if err != nil {
@@ -118,8 +114,8 @@ func (s *nsqScheduler) Schedule() {
 
 }
 
-func (s *nsqScheduler) NamedSchedulers() map[string]scheduler.Scheduler {
-	return s.namedScheduler
+func (s *nsqScheduler) SecondScheduler() scheduler.Scheduler {
+	return s.secondScheduler
 }
 
 func (s *nsqScheduler) Stop() {
