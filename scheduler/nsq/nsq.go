@@ -52,7 +52,12 @@ func (h *nsqMessageHandler) HandleMessage(m *nsq.Message) error {
 
 var _ scheduler.Scheduler = (*nsqScheduler)(nil)
 
-func NewNsqScheduler(topicName, channelName, nsqAddr, nsqLookupdAddr string) *nsqScheduler {
+func NewNsqScheduler(topicName, channelName, nsqAddr, nsqLookupdAddr string, opts ...Option) *nsqScheduler {
+	options := options{}
+
+	for _, opt := range opts {
+		opt(&options)
+	}
 
 	nsqConfig := nsq.NewConfig()
 
