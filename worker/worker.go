@@ -6,14 +6,13 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/superjcd/gocrawler/health"
-	"github.com/superjcd/gocrawler/parser"
-	"github.com/superjcd/gocrawler/request"
-	"github.com/superjcd/gocrawler/scheduler"
+	"github.com/superjcd/gocrawler/v1/health"
+	"github.com/superjcd/gocrawler/v1/parser"
+	"github.com/superjcd/gocrawler/v1/request"
+	"github.com/superjcd/gocrawler/v1/scheduler"
 )
 
 type Worker interface {
-	health.HealthChecker
 	Name() string
 	Run()
 	BeforeRequest(context.Context, *request.Request) (Signal, error)
@@ -23,24 +22,25 @@ type Worker interface {
 }
 
 type worker struct {
+	health.HealthChecker
 	name            string
 	Workers         int
 	MaxRetries      int
 	SaveRequestData bool
 	MaxRunTime      time.Duration
-	options
+	Options
 }
 
 var _ Worker = (*worker)(nil)
 
 func NewWorker(name string, workers, retries int, saveRequestData bool, maxRunTime time.Duration, opts ...Option) *worker {
-	options := options{}
+	Options := Options{}
 
 	for _, opt := range opts {
-		opt(&options)
+		opt(&Options)
 	}
 	w := &worker{name: name, Workers: workers, MaxRetries: retries, SaveRequestData: saveRequestData, MaxRunTime: maxRunTime}
-	w.options = options
+	w.Options = Options
 
 	go w.Scheduler.Schedule()
 
@@ -220,14 +220,6 @@ func (w *worker) Name() string {
 	return w.name
 }
 
-func (w *worker) Health() (bool, map[string]any) {
-	health := true
-	healthDetails := map[string]any{}
-	fetcherHealthStatus, fetcherHealthDetails := w.Fetcher.Health()
-	health = health && fetcherHealthStatus
-	healthDetails["fetcher"] = fetcherHealthDetails
-	return health, healthDetails
-}
 
 func (w *worker) retry(req, originReq *request.Request) {
 	if req.Retry < w.MaxRetries {

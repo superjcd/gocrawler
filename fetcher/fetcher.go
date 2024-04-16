@@ -6,59 +6,62 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/superjcd/gocrawler/cookie"
-	"github.com/superjcd/gocrawler/health"
-	"github.com/superjcd/gocrawler/proxy"
-	"github.com/superjcd/gocrawler/request"
-	"github.com/superjcd/gocrawler/ua"
+	"github.com/superjcd/gocrawler/v1/request"
 )
 
 type Fetcher interface {
-	health.HealthChecker
 	Fetch(ctx context.Context, req *request.Request) (*http.Response, error)
 }
 
 type fectcher struct {
-	Cli          *http.Client
-	CookieGetter cookie.CoookieGetter
-	ProxyGetter  proxy.ProxyGetter
-	UaGetter     ua.UaGetter
+	Cli *http.Client
+	options
 }
 
 var _ Fetcher = (*fectcher)(nil)
 
-func NewFectcher(timeOut time.Duration, proxyGetter proxy.ProxyGetter, cookieGetter cookie.CoookieGetter, uaGetter ua.UaGetter) *fectcher {
-	tr := http.DefaultTransport.(*http.Transport)
-	tr.Proxy = proxyGetter.Get
-	tr.DisableKeepAlives = true
-	client := &http.Client{Transport: tr, Timeout: timeOut}
-
-	f := &fectcher{
-		Cli:          client,
-		ProxyGetter:  proxyGetter,
-		CookieGetter: cookieGetter,
-		UaGetter:     uaGetter,
+func NewFectcher(timeOut time.Duration, opts ...Option) *fectcher {
+	options := options{}
+	for _, opt := range opts {
+		opt(&options)
 	}
+
+	var transport *http.Transport
+	if options.transport != nil {
+		transport = options.transport
+	} else {
+		transport = http.DefaultTransport.(*http.Transport)
+		transport.DisableKeepAlives = true
+	}
+
+	client := &http.Client{Transport: transport, Timeout: timeOut}
+	f := &fectcher{Cli: client}
 
 	return f
 }
 
 func (f *fectcher) Fetch(ctx context.Context, r *request.Request) (resp *http.Response, err error) {
-	jar, err := f.CookieGetter.Get(ctx)
-	if err != nil {
-		return nil, err
+	if f.cookieGetter != nil {
+		jar, err := f.cookieGetter.Get(ctx)
+		if err != nil {
+			return nil, err
+		}
+		f.Cli.Jar = jar
 	}
-	f.Cli.Jar = jar
+
 	req, err := http.NewRequest(r.Method, r.URL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("get url failed: %w", err)
 	}
-	ua, err := f.UaGetter.Get(ctx)
 
-	if err != nil {
-		return nil, fmt.Errorf("get ua failed: %w", err)
+	if f.uaGetter != nil {
+		ua, err := f.uaGetter.Get(ctx)
+
+		if err != nil {
+			return nil, fmt.Errorf("get ua failed: %w", err)
+		}
+		req.Header.Set("User-Agent", ua)
 	}
-	req.Header.Set("User-Agent", ua)
 
 	resp, err = f.Cli.Do(req)
 
@@ -70,11 +73,5 @@ func (f *fectcher) Fetch(ctx context.Context, r *request.Request) (resp *http.Re
 }
 
 func (f *fectcher) Health() (bool, map[string]any) {
-	// internet health
-	health := true
-	healthDetails := map[string]any{}
-	cookieHealthStatus, cookieHealthDetails := f.CookieGetter.Health()
-	health = health && cookieHealthStatus
-	healthDetails["cookies"] = cookieHealthDetails
-	return health, healthDetails
+	return true, nil
 }

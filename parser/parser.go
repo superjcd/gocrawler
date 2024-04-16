@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/superjcd/gocrawler/request"
+	"github.com/superjcd/gocrawler/v1/request"
 )
 
 type ParseItem map[string]interface{}

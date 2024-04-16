@@ -1,4 +1,4 @@
-module github.com/superjcd/gocrawler
+module github.com/superjcd/gocrawler/v1
 
 go 1.21.6
 
@@ -14,6 +14,7 @@ require (
 	github.com/go-playground/locales v0.13.0 // indirect
 	github.com/go-playground/universal-translator v0.17.0 // indirect
 	github.com/go-playground/validator/v10 v10.4.1 // indirect
+	github.com/gofrs/uuid v4.4.0+incompatible // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/klauspost/compress v1.13.6 // indirect

@@ -9,9 +9,9 @@ import (
 
 	"github.com/go-redis/redis"
 	"github.com/qiniu/qmgo"
-	"github.com/superjcd/gocrawler/counter"
-	"github.com/superjcd/gocrawler/parser"
-	"github.com/superjcd/gocrawler/store"
+	"github.com/superjcd/gocrawler/v1/counter"
+	"github.com/superjcd/gocrawler/v1/parser"
+	"github.com/superjcd/gocrawler/v1/store"
 )
 
 type bufferedMongoStorage struct {
@@ -76,7 +76,6 @@ func NewBufferedMongoStorage(uri, database, collection string, bufferSize int, a
 func (s *bufferedMongoStorage) Save(ctx context.Context, items ...parser.ParseItem) error {
 	s.L.Lock()
 	defer s.L.Unlock()
-
 	for {
 		if len(items) > s.bufSize {
 			return fmt.Errorf("number of items too large(larger than the max bufSize), either increase storage bufSize or decrease number of items")
@@ -102,6 +101,7 @@ func (s *bufferedMongoStorage) flush() error {
 	}
 	err := s.insertManyTOMongo(s.buf...)
 	if err != nil {
+		fmt.Println("debug", err)
 		return err
 	}
 
