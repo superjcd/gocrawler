@@ -3,7 +3,7 @@ package store
 import (
 	"context"
 
-	"github.com/superjcd/gocrawler/v1/parser"
+	"github.com/superjcd/gocrawler/parser"
 )
 
 type Storage interface {

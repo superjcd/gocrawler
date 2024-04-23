@@ -3,9 +3,9 @@ package fetcher
 import (
 	"net/http"
 
-	"github.com/superjcd/gocrawler/v1/cookie"
-	"github.com/superjcd/gocrawler/v1/proxy"
-	"github.com/superjcd/gocrawler/v1/ua"
+	"github.com/superjcd/gocrawler/cookie"
+	"github.com/superjcd/gocrawler/proxy"
+	"github.com/superjcd/gocrawler/ua"
 )
 
 // proxyGetter proxy.ProxyGetter, cookieGetter cookie.CoookieGetter, uaGetter ua.UaGetter

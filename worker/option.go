@@ -5,12 +5,12 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/superjcd/gocrawler/v1/fetcher"
-	"github.com/superjcd/gocrawler/v1/parser"
-	"github.com/superjcd/gocrawler/v1/request"
-	"github.com/superjcd/gocrawler/v1/scheduler"
-	"github.com/superjcd/gocrawler/v1/store"
-	"github.com/superjcd/gocrawler/v1/visit"
+	"github.com/superjcd/gocrawler/fetcher"
+	"github.com/superjcd/gocrawler/parser"
+	"github.com/superjcd/gocrawler/request"
+	"github.com/superjcd/gocrawler/scheduler"
+	"github.com/superjcd/gocrawler/store"
+	"github.com/superjcd/gocrawler/visit"
 	"golang.org/x/time/rate"
 )
 

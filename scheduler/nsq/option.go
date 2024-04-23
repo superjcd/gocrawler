@@ -1,7 +1,7 @@
 package nsq
 
 import (
-	"github.com/superjcd/gocrawler/v1/scheduler"
+	"github.com/superjcd/gocrawler/scheduler"
 )
 
 type options struct {

@@ -5,8 +5,8 @@ import (
 	"log"
 
 	"github.com/qiniu/qmgo"
-	"github.com/superjcd/gocrawler/v1/parser"
-	"github.com/superjcd/gocrawler/v1/store"
+	"github.com/superjcd/gocrawler/parser"
+	"github.com/superjcd/gocrawler/store"
 )
 
 type mongoStorage struct {

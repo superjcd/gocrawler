@@ -5,8 +5,8 @@ import (
 	"log"
 
 	"github.com/nsqio/go-nsq"
-	"github.com/superjcd/gocrawler/v1/request"
-	"github.com/superjcd/gocrawler/v1/scheduler"
+	"github.com/superjcd/gocrawler/request"
+	"github.com/superjcd/gocrawler/scheduler"
 )
 
 type nsqScheduler struct {

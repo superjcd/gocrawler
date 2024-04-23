@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/superjcd/gocrawler/v1/health"
-	"github.com/superjcd/gocrawler/v1/parser"
-	"github.com/superjcd/gocrawler/v1/request"
-	"github.com/superjcd/gocrawler/v1/scheduler"
+	"github.com/superjcd/gocrawler/health"
+	"github.com/superjcd/gocrawler/parser"
+	"github.com/superjcd/gocrawler/request"
+	"github.com/superjcd/gocrawler/scheduler"
 )
 
 type Worker interface {
@@ -219,7 +219,6 @@ Loop:
 func (w *worker) Name() string {
 	return w.name
 }
-
 
 func (w *worker) retry(req, originReq *request.Request) {
 	if req.Retry < w.MaxRetries {

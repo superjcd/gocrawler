@@ -3,12 +3,12 @@ package default_builder
 import (
 	"time"
 
-	"github.com/superjcd/gocrawler/v1/fetcher"
-	"github.com/superjcd/gocrawler/v1/parser"
-	"github.com/superjcd/gocrawler/v1/scheduler/nsq"
-	"github.com/superjcd/gocrawler/v1/store/mongo"
-	"github.com/superjcd/gocrawler/v1/ua"
-	"github.com/superjcd/gocrawler/v1/worker"
+	"github.com/superjcd/gocrawler/fetcher"
+	"github.com/superjcd/gocrawler/parser"
+	"github.com/superjcd/gocrawler/scheduler/nsq"
+	"github.com/superjcd/gocrawler/store/mongo"
+	"github.com/superjcd/gocrawler/ua"
+	"github.com/superjcd/gocrawler/worker"
 	"golang.org/x/time/rate"
 )
 

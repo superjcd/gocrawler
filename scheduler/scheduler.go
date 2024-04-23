@@ -1,6 +1,6 @@
 package scheduler
 
-import "github.com/superjcd/gocrawler/v1/request"
+import "github.com/superjcd/gocrawler/request"
 
 const (
 	TYP_PUSH_CHANNEL = iota

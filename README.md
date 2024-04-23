@@ -11,6 +11,6 @@ gocrawler是非常轻量级的分布式爬虫框架， 可以快速构建高性�
 
 ### 安装gocrawler
 ```shell
-go get https://github.com/superjcd/gocrawler/v1
+go get https://github.com/superjcd/gocrawler
 ```
 

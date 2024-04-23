@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/go-redis/redis"
-	"github.com/superjcd/gocrawler/v1/visit"
+	"github.com/superjcd/gocrawler/visit"
 )
 
 type RedisVisiter struct {

@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/superjcd/gocrawler/v1/request"
+	"github.com/superjcd/gocrawler/request"
 )
 
 type Fetcher interface {
