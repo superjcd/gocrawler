@@ -9,7 +9,7 @@ gocrawler是非常轻量级的分布式爬虫框架， 可以快速构建高性�
 - [nsq](https://nsq.io/)
 - [mongodb](https://www.mongodb.com/)
 
-我们的目标是爬取网站https://www.zyte.com/blog上的所有blog的基础信息， 包括：
+我们的目标是爬取[zyte网站](https://www.zyte.com/blog)上的所有blog的基础信息， 包括：
 - 标题
 - 作者
 - 阅读时间
@@ -66,7 +66,7 @@ func (p *zyteParser) Parse(ctx context.Context, r *http.Response) (*parser.Parse
 }
 
 ```
-> 推荐使用gocrawler来构建网页解析组件
+> 推荐使用[goquery](https://github.com/PuerkitoBio/goquery)来构建网页解析组件
 
 接着， 我们可以在main文件中正式构建我们的第一个爬虫:
 ```go
@@ -130,4 +130,68 @@ func main() {
 检查本地的mongodb的zyte数据库的default集合，你就会看到你想要的数据。就是这么简单
 
 
-更多例子, to be continued...
+
+## 解析并提交更多Request
+上面的例子有一个很大的问题在于，作为消费者在添加任务的时候， 这里是显式地把需要抓取的page一页一页地提交给了gocrawler, 比如在上面例子中, 我们提交了9个请求， 问题是在真实场景下， 任务的请求数是不固定的， 理想情况下， 我们会希望爬虫能够解析并递交请求。  
+这一点在gocrawler中很好实现，因为gocrawler的Parser组件的Parse函数产出的`*parser.ParseResult`的结构体是可以包含Request对象的， 而这些被解析出来的Request对象会被gocrawler提交
+> 当然这里会衍生出另外的问题， 如何过滤重复请求以及如何使用类似于自动的URL匹配器获取目标url， 关于前者， gocrawler可以通过添加Visit组件来过滤一定时间内已经抓取过的url， 后者gocrawler自身没有实现， 但是这个功能用户可以在自定义的Parser组件中实现
+
+废话不多说 ，我们切入正题：
+首先我们需要修改一下Parser:
+```go
+
+package parser
+
+import (
+	"context"
+	"net/http"
+
+	"github.com/PuerkitoBio/goquery"
+	"github.com/superjcd/gocrawler/parser"
+	"github.com/superjcd/gocrawler/request"
+)
+
+type zyteParser struct{}
+
+func NewZyteParser() *zyteParser {
+	return &zyteParser{}
+}
+
+func (p *zyteParser) Parse(ctx context.Context, r *http.Response) (*parser.ParseResult, error) {
+    ...
+    resultItems := make([]parser.ParseItem, 0)
+	requests := []*request.Request{}
+	ctxValue := ctx.Value(request.RequestDataCtxKey{})
+	requestData := ctxValue.(map[string]string)
+	page := requestData["page"]
+
+	if page == "1" {
+		uid, _ := uuid.NewV4()
+		for pg := 2; pg <= 5; pg++ {
+			data := make(map[string]string, 0)
+			data["taskId"] = uid.String()
+			data["page"] = strconv.Itoa(pg)
+			url := fmt.Sprintf("https://www.zyte.com/blog/page/%d", pg)
+			req := request.Request{
+				URL:    url,
+				Method: "GET",
+				Data:   data,
+			}
+			requests = append(requests, &req)
+		}
+	}
+   
+    ...
+	result.Items = resultItems
+	result.Requests = requests
+
+	return result, nil
+}
+```
+> gocrawler会默认把Request对象中的Data属性传递到上下文中， 用户可以通过ctx.Value(request.RequestDataCtxKey{})来获取这个值  
+
+首先我要承认的是， 我这里作弊了， 直接假定最大page数是5，正常情况下这个值是需要自己去解析的;  
+我们后通过循环构造了另外新的4个请求， 最后赋值给result的Requsts，剩下的就只要就交给gocrawler去处理就好了。接着我们修改一下pub/main.go中请求的数量， 确保只发送一个请求， 然后你就能看到总共有5个请求被发送并被解析入库了， 其中四个就是在解析第一页的响应时候被提交的， That's cool
+> 聪明的你可能会意识到， 在上面的例子中其实我们没办法在第一页拿到最大页码数，它只能一页一页地下翻才能知道最大页数。当然， 通常来说分页项会包含总数或者页码数， 上面的这个算是特例了
+
+
