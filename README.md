@@ -1,7 +1,7 @@
 # gocrawler
 gocrawler是非常轻量级的分布式爬虫框架， 可以快速构建高性能爬虫（生产者-消费者模式）， 同时gocrawler严格遵循面向接口的设计， 所以gocrawler的各种组件都是可以轻松扩展的
 
-更详细的说明， 可以参考[这里](https://superjcd.github.io/p/golang%E5%88%86%E5%B8%83%E5%BC%8F%E7%88%AC%E8%99%AB%E8%AE%BE%E8%AE%A1/)
+更详细的说明， 可以参考[这里](https://superjcd.github.io/p/golang%E5%88%86%E5%B8%83%E5%BC%8F%E7%88%AC%E8%99%AB%E8%AE%BE%E8%AE%A1/)；文档中的例子，可以参考[这里](https://github.com/superjcd/gocrawler_examples)
 
 ## 快速开始
 使用gocrawler的builder模式能够快速构建一个分布式爬虫, 作为一个示例， 我们将使用gocrawler抓取[zyte](https://www.zyte.com/blog/)上的博客信息  
@@ -132,9 +132,9 @@ func main() {
 
 
 ## 解析并提交更多Request
-上面的例子有一个很大的问题在于，作为消费者在添加任务的时候， 这里是显式地把需要抓取的page一页一页地提交给了gocrawler, 比如在上面例子中, 我们提交了9个请求， 问题是在真实场景下， 任务的请求数是不固定的， 理想情况下， 我们会希望爬虫能够解析并递交请求。  
+上面的例子有一个很大的问题在于，生产者显式地把需要抓取的page一页一页地提交给了gocrawler, 比如在上面例子中, 我们提交了9个请求， 问题是在真实场景下， 任务的请求数有可能是不固定的， 理想情况下， 我们会希望爬虫能够解析并递交请求。  
 这一点在gocrawler中很好实现，因为gocrawler的Parser组件的Parse函数产出的`*parser.ParseResult`的结构体是可以包含Request对象的， 而这些被解析出来的Request对象会被gocrawler提交
-> 当然这里会衍生出另外的问题， 如何过滤重复请求以及如何使用类似于自动的URL匹配器获取目标url， 关于前者， gocrawler可以通过添加Visit组件来过滤一定时间内已经抓取过的url， 后者gocrawler自身没有实现， 但是这个功能用户可以在自定义的Parser组件中实现
+> 当然这里会衍生出另外的问题是， 如何过滤重复请求以及如何使用类似于自动的URL匹配器获取目标url， 关于前者， gocrawler可以通过添加Visit组件来过滤一定时间内已经抓取过的url， 后者gocrawler自身没有实现， 但是这个功能用户可以在自定义的Parser组件中实现
 
 废话不多说 ，我们切入正题：
 首先我们需要修改一下Parser:
@@ -172,6 +172,7 @@ func (p *zyteParser) Parse(ctx context.Context, r *http.Response) (*parser.Parse
 			data["taskId"] = uid.String()
 			data["page"] = strconv.Itoa(pg)
 			url := fmt.Sprintf("https://www.zyte.com/blog/page/%d", pg)
+			// 注意： 在这里我们构建新的请求
 			req := request.Request{
 				URL:    url,
 				Method: "GET",
@@ -190,8 +191,52 @@ func (p *zyteParser) Parse(ctx context.Context, r *http.Response) (*parser.Parse
 ```
 > gocrawler会默认把Request对象中的Data属性传递到上下文中， 用户可以通过ctx.Value(request.RequestDataCtxKey{})来获取这个值  
 
-首先我要承认的是， 我这里作弊了， 直接假定最大page数是5，正常情况下这个值是需要自己去解析的;  
-我们后通过循环构造了另外新的4个请求， 最后赋值给result的Requsts，剩下的就只要就交给gocrawler去处理就好了。接着我们修改一下pub/main.go中请求的数量， 确保只发送一个请求， 然后你就能看到总共有5个请求被发送并被解析入库了， 其中四个就是在解析第一页的响应时候被提交的， That's cool
-> 聪明的你可能会意识到， 在上面的例子中其实我们没办法在第一页拿到最大页码数，它只能一页一页地下翻才能知道最大页数。当然， 通常来说分页项会包含总数或者页码数， 上面的这个算是特例了
+这样,当我们请求第一页的时候， 我们通过首页得到的最大页码数(5)， 就可以连带把其他页面的请求一并传递给任务队列(当然正常情况下, 最大页码数这个值是需要自己去解析的）
 
 
+## 发送Request到其他爬虫Worker
+如果我们想要把请求传递给其他的woker该怎么办呢， 假设我们有两个爬虫worker：
+- 列表worker, 获取列表项
+- 详情worker, 获取每一页的详情信息
+
+这种需要用到多个worker的场景其实非常常见， 比如以抓取房价信息为例， 房屋的简要信息会以列表页形式存在， 比如一个列表页上面可能有20个房屋链接；然后当我们点击每个链接， 就可以获得该房屋的详情信息；    
+由于列表页和详情页的url以及页面信息通常是不同的， 所以比较合理的方式就是分别运行两个Worker(可以共用部分组件， 比如fetcher), 那么现在需要面对的问题是， 如何在**列表爬虫**抓取列表页信息的时候， 把详情页的请求提交到**详情爬虫**？  
+在gocrawler中实现这个方式只需要两步：
+### 第一步:替换默认Scheduler
+gocrawler中的Scheduler组件有一个Option（选项）是secondScheduler（也是一个Scheduler接口）， 如果secondScheduler非空， 那么我们就能把请求传递给这个seconndScheduler（如何传递请求， 第二个步骤会讲）, 只要另外一个爬虫Worker订阅了seconndScheduler，那么第二个worker自然也能同时进行运行。
+
+首先我们通过调用`DefaultWorkerBuilderConfig`的`NsqScheduler`,`NsqScheduler`会为我们的列表worker的Scheduler对象添加一个seconndScheduler， 然后用这个带seconndScheduler的Scheduler替换默认的Scheduler： 
+
+```go
+...(略)
+
+func main() {
+	config := default_builder.DefaultWorkerBuilderConfig{}
+	worker := config.Name("zyte").MaxRunTime(300).Workers(10).LimitRate(10).NsqScheduler("", "","list_worker", "default", "details_worker", "default").Build(parser.NewZyteParser())
+	worker.Run()
+}
+
+```
+NsqScheduler接受6个参数，前两个是nsq的地址参数，可以像上面这样使用默认值(默认nsq按照官网会运行在本地)；后面四个分别是`topic`, `channel`,`second_topic`, `second_channel`， 前两个定义了主worker(也就是列表worker)的消息队列的topic和channel参数， 后面两个就是我们的seconndScheduler的topic和channel参数。
+
+### 第二步：发送Request到seconndScheduler
+要想把Request发送到secondScheduler很简单，只要修改一下Request的IsSecondary字段就好， 将它设置为true就可以了， 例如:  
+假设我们在列表页抓到若干个详情页的url, 我们需要像上例一样在Parse函数中构造新的Request对象
+```go
+...    
+	for _, url := range urls{ // urls是详情页请求地址队列
+		reqData := make(map[string]string, 0))
+		reqData["taskId"] = uid.String()
+		newRequest := request.Request{
+			URL:         url,
+			Method:      "GET",
+			Data:        reqData,
+			IsSecondary: true,   // 这里是关键
+		}
+		requests = append(requests, &newRequest)
+	}
+    ...
+	result.Items = resultItems
+	result.Requests = requests
+
+```
