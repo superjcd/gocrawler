@@ -1,7 +1,24 @@
 # gocrawler
 gocrawler是非常轻量级的分布式爬虫框架， 可以快速构建高性能爬虫（生产者-消费者模式）， 同时gocrawler严格遵循面向接口的设计， 所以gocrawler的各种组件都是可以轻松扩展的
 
+<!-- TOC -->
 
+- [gocrawler](#gocrawler)
+    - [快速开始](#%E5%BF%AB%E9%80%9F%E5%BC%80%E5%A7%8B)
+        - [基础实现](#%E5%9F%BA%E7%A1%80%E5%AE%9E%E7%8E%B0)
+        - [解析并提交更多Request](#%E8%A7%A3%E6%9E%90%E5%B9%B6%E6%8F%90%E4%BA%A4%E6%9B%B4%E5%A4%9Arequest)
+        - [发送Request到其他爬虫Worker](#%E5%8F%91%E9%80%81request%E5%88%B0%E5%85%B6%E4%BB%96%E7%88%AC%E8%99%ABworker)
+            - [第一步:替换默认Scheduler](#%E7%AC%AC%E4%B8%80%E6%AD%A5%E6%9B%BF%E6%8D%A2%E9%BB%98%E8%AE%A4scheduler)
+            - [第二步：发送Request到seconndScheduler](#%E7%AC%AC%E4%BA%8C%E6%AD%A5%E5%8F%91%E9%80%81request%E5%88%B0seconndscheduler)
+    - [自定义组件](#%E8%87%AA%E5%AE%9A%E4%B9%89%E7%BB%84%E4%BB%B6)
+        - [替换网络请求组件](#%E6%9B%BF%E6%8D%A2%E7%BD%91%E7%BB%9C%E8%AF%B7%E6%B1%82%E7%BB%84%E4%BB%B6)
+        - [替换存储组件](#%E6%9B%BF%E6%8D%A2%E5%AD%98%E5%82%A8%E7%BB%84%E4%BB%B6)
+    - [错误处理和生命周期函数](#%E9%94%99%E8%AF%AF%E5%A4%84%E7%90%86%E5%92%8C%E7%94%9F%E5%91%BD%E5%91%A8%E6%9C%9F%E5%87%BD%E6%95%B0)
+        - [沟通时机](#%E6%B2%9F%E9%80%9A%E6%97%B6%E6%9C%BA)
+        - [沟通方式](#%E6%B2%9F%E9%80%9A%E6%96%B9%E5%BC%8F)
+    - [参考](#%E5%8F%82%E8%80%83)
+
+<!-- /TOC -->
 ## 快速开始
 ### 基础实现
 使用gocrawler的builder模式能够快速构建一个分布式爬虫, 作为一个示例， 我们将使用gocrawler抓取[zyte](https://www.zyte.com/blog/)上的博客信息  
@@ -16,6 +33,7 @@ gocrawler是非常轻量级的分布式爬虫框架， 可以快速构建高性�
 - 作者
 - 阅读时间
 - 发布时间
+
 > 我们会抓取列表项信息， 至于如何同时在抓取列表信息的同时抓取每个列表项的详情信息后面会介绍
 
 首先我们创建一个项目
