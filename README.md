@@ -1,19 +1,22 @@
 # gocrawler
 gocrawler是非常轻量级的分布式爬虫框架， 可以快速构建高性能爬虫（生产者-消费者模式）， 同时gocrawler严格遵循面向接口的设计， 所以gocrawler的各种组件都是可以轻松扩展的
 
-更详细的说明， 可以参考[这里](https://superjcd.github.io/p/golang%E5%88%86%E5%B8%83%E5%BC%8F%E7%88%AC%E8%99%AB%E8%AE%BE%E8%AE%A1/)；文档中的例子，可以参考[这里](https://github.com/superjcd/gocrawler_examples)
 
 ## 快速开始
+### 基础实现
 使用gocrawler的builder模式能够快速构建一个分布式爬虫, 作为一个示例， 我们将使用gocrawler抓取[zyte](https://www.zyte.com/blog/)上的博客信息  
 在运行下示例前， 你需要确保已经安装并能够链接以下依赖：
 - [nsq](https://nsq.io/)
 - [mongodb](https://www.mongodb.com/)
+
+> gocrawler本身并不依赖nsq作为消息组件， 同样也不依赖mongodb作为存储组件，后面会介绍替换的方式
 
 我们的目标是爬取[zyte网站](https://www.zyte.com/blog)上的所有blog的基础信息， 包括：
 - 标题
 - 作者
 - 阅读时间
 - 发布时间
+> 我们会抓取列表项信息， 至于如何同时在抓取列表信息的同时抓取每个列表项的详情信息后面会介绍
 
 首先我们创建一个项目
 ```
@@ -68,7 +71,7 @@ func (p *zyteParser) Parse(ctx context.Context, r *http.Response) (*parser.Parse
 ```
 > 推荐使用[goquery](https://github.com/PuerkitoBio/goquery)来构建网页解析组件
 
-接着， 我们可以在main文件中正式构建我们的第一个爬虫:
+接着， 我们可以在`main.go`文件中正式构建我们的第一个爬虫:
 ```go
 // main.go
 package main
@@ -84,7 +87,7 @@ func main() {
 	worker.Run()
 }
 ```
-运行`go run .`就能顺利地启动爬虫。当然为了验证爬虫worker是不是真正在运行， 我们需要喂给worker一些任务；
+在main.go路径运行命令`go run .`就能顺利地启动爬虫。当然为了让我们的爬虫worker工作起来， 我们需要喂给worker一些任务；
 在pub/main.go中编写提交任务的逻辑(生产者)：
 ```go
 package main
@@ -126,20 +129,18 @@ func main() {
 	}
 }
 ```
-新开一个terminal并运行`go run .\pub\`， 可以在启动woker的终端中看到目标网站被解析并存入到mongodb的日志信息。  
-检查本地的mongodb的zyte数据库的default集合，你就会看到你想要的数据。就是这么简单
+新开一个终端， 并运行`go run .\pub\`， 可以在启动woker的终端中看到目标网站被解析并存入到mongodb的日志信息。  
+检查本地的mongodb的zyte数据库的default集合，你就会看到我们抓到的列表数据。
 
 
-
-## 解析并提交更多Request
-上面的例子有一个很大的问题在于，生产者显式地把需要抓取的page一页一页地提交给了gocrawler, 比如在上面例子中, 我们提交了9个请求， 问题是在真实场景下， 任务的请求数有可能是不固定的， 理想情况下， 我们会希望爬虫能够解析并递交请求。  
+### 解析并提交更多Request
+上面的例子有一个很大的问题在于：生产者显式地把需要抓取的page一页一页地提交给了gocrawler, 比如在上面例子中, 我们提交了9个请求， 问题是在真实场景下， 任务的请求数有可能是不固定的， 理想情况下， 我们会希望爬虫能够在爬取第一页的时候， 通过解析首页的最大页码数来自动的提交更多请求。    
 这一点在gocrawler中很好实现，因为gocrawler的Parser组件的Parse函数产出的`*parser.ParseResult`的结构体是可以包含Request对象的， 而这些被解析出来的Request对象会被gocrawler提交
 > 当然这里会衍生出另外的问题是， 如何过滤重复请求以及如何使用类似于自动的URL匹配器获取目标url， 关于前者， gocrawler可以通过添加Visit组件来过滤一定时间内已经抓取过的url， 后者gocrawler自身没有实现， 但是这个功能用户可以在自定义的Parser组件中实现
 
 废话不多说 ，我们切入正题：
 首先我们需要修改一下Parser:
 ```go
-
 package parser
 
 import (
@@ -161,6 +162,7 @@ func (p *zyteParser) Parse(ctx context.Context, r *http.Response) (*parser.Parse
     ...
     resultItems := make([]parser.ParseItem, 0)
 	requests := []*request.Request{}
+	// gocrawler会默认把Request对象中的Data属性传递到上下文中， 用户可以通过ctx.Value(request.RequestDataCtxKey{})来获取这个值（map）  
 	ctxValue := ctx.Value(request.RequestDataCtxKey{})
 	requestData := ctxValue.(map[string]string)
 	page := requestData["page"]
@@ -189,12 +191,10 @@ func (p *zyteParser) Parse(ctx context.Context, r *http.Response) (*parser.Parse
 	return result, nil
 }
 ```
-> gocrawler会默认把Request对象中的Data属性传递到上下文中， 用户可以通过ctx.Value(request.RequestDataCtxKey{})来获取这个值  
-
-这样,当我们请求第一页的时候， 我们通过首页得到的最大页码数(5)， 就可以连带把其他页面的请求一并传递给任务队列(当然正常情况下, 最大页码数这个值是需要自己去解析的）
+这样,当我们请求第一页的时候，就可以连带把其他页面的请求一并传递给任务队列(当然正常情况下, 最大页码数这个值是需要自己去解析的）
 
 
-## 发送Request到其他爬虫Worker
+### 发送Request到其他爬虫Worker
 如果我们想要把请求传递给其他的woker该怎么办呢， 假设我们有两个爬虫worker：
 - 列表worker, 获取列表项
 - 详情worker, 获取每一页的详情信息
@@ -202,30 +202,38 @@ func (p *zyteParser) Parse(ctx context.Context, r *http.Response) (*parser.Parse
 这种需要用到多个worker的场景其实非常常见， 比如以抓取房价信息为例， 房屋的简要信息会以列表页形式存在， 比如一个列表页上面可能有20个房屋链接；然后当我们点击每个链接， 就可以获得该房屋的详情信息；    
 由于列表页和详情页的url以及页面信息通常是不同的， 所以比较合理的方式就是分别运行两个Worker(可以共用部分组件， 比如fetcher), 那么现在需要面对的问题是， 如何在**列表爬虫**抓取列表页信息的时候， 把详情页的请求提交到**详情爬虫**？  
 在gocrawler中实现这个方式只需要两步：
-### 第一步:替换默认Scheduler
-gocrawler中的Scheduler组件有一个Option（选项）是secondScheduler（也是一个Scheduler接口）， 如果secondScheduler非空， 那么我们就能把请求传递给这个seconndScheduler（如何传递请求， 第二个步骤会讲）, 只要另外一个爬虫Worker订阅了seconndScheduler，那么第二个worker自然也能同时进行运行。
-
-首先我们通过调用`DefaultWorkerBuilderConfig`的`NsqScheduler`,`NsqScheduler`会为我们的列表worker的Scheduler对象添加一个seconndScheduler， 然后用这个带seconndScheduler的Scheduler替换默认的Scheduler： 
+#### 第一步:替换默认Scheduler
+gocrawler中的Scheduler组件有一个Option（选项）是secondScheduler（也是一个Scheduler接口）， 如果secondScheduler非空， 那么我们就能把请求传递给这个seconndScheduler（如何传递请求， 第二个步骤会讲）, 只要另外一个爬虫Worker订阅了seconndScheduler的消息，那么第二个worker自然也能同时进行运行。  
 
 ```go
-...(略)
+package main 
+
+import (
+	"github.com/superjcd/gocrawler/worker"
+	"github.com/superjcd/gocrawler/scheduler/nsq"
+)
+
 
 func main() {
+	// 重新准备一个scheduler
+	secondScheduler := nsq.NewNsqScheduler(your_second_topic, your_second_channel, "localhost:4150", "localhost:4161")
+	scheduler := nsq.NewNsqScheduler(your_second_topic, your_second_channel, "localhost:4150", "localhost:4161", nsq.WithSecondScheduler(secondScheduler))
+
 	config := default_builder.DefaultWorkerBuilderConfig{}
-	worker := config.Name("zyte").MaxRunTime(300).Workers(10).LimitRate(10).NsqScheduler("", "","list_worker", "default", "details_worker", "default").Build(parser.NewZyteParser())
+	worker := config.Name("zyte").MaxRunTime(300).Workers(10).LimitRate(10).Build(
+		parser.NewZyteParser(),worker.WithScheduler(scheduler),) // 替换掉默认shceduler
 	worker.Run()
 }
 
 ```
-NsqScheduler接受6个参数，前两个是nsq的地址参数，可以像上面这样使用默认值(默认nsq按照官网会运行在本地)；后面四个分别是`topic`, `channel`,`second_topic`, `second_channel`， 前两个定义了主worker(也就是列表worker)的消息队列的topic和channel参数， 后面两个就是我们的seconndScheduler的topic和channel参数。
 
-### 第二步：发送Request到seconndScheduler
+#### 第二步：发送Request到seconndScheduler
 要想把Request发送到secondScheduler很简单，只要修改一下Request的IsSecondary字段就好， 将它设置为true就可以了， 例如:  
 假设我们在列表页抓到若干个详情页的url, 我们需要像上例一样在Parse函数中构造新的Request对象
 ```go
 ...    
 	for _, url := range urls{ // urls是详情页请求地址队列
-		reqData := make(map[string]string, 0))
+		reqData := make(map[string]string, 0)
 		reqData["taskId"] = uid.String()
 		newRequest := request.Request{
 			URL:         url,
@@ -240,3 +248,120 @@ NsqScheduler接受6个参数，前两个是nsq的地址参数，可以像上面�
 	result.Requests = requests
 
 ```
+
+## 自定义组件
+### 替换网络请求组件
+gocrawler的默认Fetcher只是一个非常简单的网络请求组件，只使用默认网络请求组件在应对一些常见的反扒手段的时候肯定是远远不够的， 所以我们有时候我们希望Fetcher可以支持
+- 从代理池获取代理
+- 从Cookie池获取cookie
+- 改变请求头
+
+Fetcher在gocrawler中只是一个接口， 所以只要实现fetch方法（具体函数签名见下面）， 然后通过类似上面这个例子, 在Build函数中添加`worker.WithFetcher(your_fetcher)`就能替换掉默认Fetcher。
+```go
+// Fetcher的定义
+type Fetcher interface {
+	Fetch(ctx context.Context, req *request.Request) (*http.Response, error)
+}
+```
+当然我会更推荐使用gocrawler中的NewFetcher去创建一个Fetcher对象, 结和Option模式， 将你需要的替换的部分(比如下面的代理获取组件)替换掉即可：
+
+```go
+import (
+	"time"
+	"github.com/sup
+	erjcd/gocrawler/fetcher" 
+)
+fetcher := fetcher.NewFetcher(10 * time.Second, fetcher.WithProxyGetter(your_proxy_getter))
+```
+`your_proxy_getter`是你需要实现的proxy获取组件, 它的定义如下：
+```
+type ProxyGetter interface {
+	Get(*http.Request) (*url.URL, error)
+}
+```
+所以， 如果你需要从你的代理池中获取你的代理， 然后通过代理发起请求， 你只要去自己去实现`ProxyGetter`即可
+
+
+### 替换存储组件
+gocrawler的`DefaultWorkerBuilderConfig`目前只支持使用mongodb来作为爬虫的默认存储组件， 如果用户想要使用别的存储组件， 只要实现一个自定义的Storage即可，然后和前面的自定义Fetcher类似， 通过在Build函数中添加`worker.WithStorage(your_storage)`就能替换掉默认存储组件:
+```go
+type Storage interface {
+	Save(ctx context.Context, datas ...parser.ParseItem) error
+}
+```
+需要注意的是， 用户自定义存储组件的时候， 最好考虑结合一些缓存机制，比如当缓存收集到一定数量的对象之后再把数据flush到存储器， 而不是一条一条数据的存， 特别是对于mysql这类关系数据库而言，高并发下使用逐条存储的代价是很大的。  
+默认的mongo存储组件是考虑了缓存机制的，用户可以通过调用`DefaultWorkerBuilderConfig`的`BufferSize`和`AutoFlushInterval`来定义缓存大小以及flush间隔（秒）， 例如：
+```go
+config := default_builder.DefaultWorkerBuilderConfig{}
+worker := config.Name("zyte").Workers(10).LimitRate(10).BufferSize(100).AutoFlushInterval(10).Build(your_parser, your_options...)
+```
+在上例中， 我们的爬虫有一个大小为100的缓存，缓存如果满了就会存储到mongo中， 如果缓存没有满，也会在10秒之后被flush到mongo中
+
+## 错误处理和生命周期函数
+由于爬虫需要和网络以及各种日新月异的反爬技术打交道， 所以关于爬虫任务， 有一点是不会错的：
+> 我们的爬虫随时都会出错
+
+所以如何正确的处理错误的请求是爬虫任务的一个挥之不去的主题， 简单的丢弃失败的请求肯定是不可行的， 当然无限的重试自然也不可取， 有限次数的重试似乎是不错的折衷方法， gocrawler也是这么做的， 重试次数用户可以通过`DefaultWorkerBuilderConfig`的`Retries`方法来定义(默认是5次) ，但是还有一个更加关键的点在于--用户如何告诉gocrawler对某个失败的请求进行重试而不是丢弃呢， 因为有时候我们确实也需要丢弃掉不需要的请求(比如状态码是404的请求), 所以这种和gocrawler引擎进行沟通的机制是必要。  
+实现这个沟通机制的关键在于两点：
+- 沟通的时机
+- 沟通的方式
+
+### 沟通时机
+gocrawler的Worker有以下生命周期函数：
+- BeforeRequest 发生在请求之前
+- AfterRequest  发生在请求之后
+- BeforeSave    发生在存储之前
+- AfterSave     发生在存储之后
+
+这里以`AfterRequest`为例：
+```go
+func (w *worker) AfterRequest(ctx context.Context, resp *http.Response) (Signal, error) {
+	var sig Signal
+	if w.AfterRequestHook != nil {
+		return w.AfterRequestHook(ctx, resp)
+	}
+	sig |= DummySignal
+	return sig, nil
+}
+```
+`AfterRequest`会发生在请求发生之后（Fetcher进行fetch之后）， 页面被解析之前；如果用户提供了`AfterRequestHook`，那么`AfterRequestHook`就会在这个阶段被执行（一个生命周期函数会对应一种hook）；  
+所以用户完全可以在这个阶段， 通过判断请求的状态码来确定是不是要进行重试
+
+### 沟通方式
+说完了沟通时机， 现在需要说一下方式了；gocrawler会基于生命周期函数返回的Signal来决定下一步该如何行动， 下面我们尝试定义一个 `AfterRequestHook`（它会返回Signal）：
+```golang
+import "github.com/superjcd/gocrawler/worker"
+func CheckResponseStatus(ctx context.Context, resp *http.Response) (worker.Signal, error) {
+	var sig worker.Signal
+	switch resp.StatusCode {
+	case http.StatusOK:
+		sig |= worker.DummySignal
+	case http.StatusNotFound:
+		sig |= worker.ContinueWithoutRetrySignal
+	default:
+		sig |= worker.ContinueWithRetrySignal
+	}
+
+	return sig, nil
+}
+```
+`CheckResponseStatus`会去判断http.Response的状态码， 如果是200就返回`DummySignal`信号， 404就返回`ContinueWithoutRetrySignal`,在其他情况下就是返回`ContinueWithRetrySignal`信号；  
+当gocrawler接收到`DummySignal`的， 会继续执行； 接收到`ContinueWithoutRetrySignal`的时候则会跳过后面的步骤直接处理下一个请求；而接收到`ContinueWithRetrySignal`的时候， gocrawler就会发起重试， 完整的信号列表：
+```golang
+type Signal int8
+
+const (
+	DummySignal = 1 << iota    //  默认初始signal
+	ContinueWithRetrySignal    //  重试信号
+	ContinueWithoutRetrySignal  // 不重试, 继续下一个任务
+	BreakWithPanicSignal        //  停止爬虫并panic
+	BreakWithoutPanicSignal     //  停止爬虫但是不panic
+)
+```
+> Signal本质上就是一个8位有符号整数
+
+（最后还有一点需要注意的是， 上面的重试并不是立马重试， 而是请求会被重新发送到请求队列中，等待下一次被处理）
+
+## 参考
+- [我的博客](https://superjcd.github.io/p/golang%E5%88%86%E5%B8%83%E5%BC%8F%E7%88%AC%E8%99%AB%E8%AE%BE%E8%AE%A1/)
+- [文档中的zyte的例子](https://github.com/superjcd/gocrawler_examples)

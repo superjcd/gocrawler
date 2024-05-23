@@ -5,7 +5,6 @@ import (
 
 	"github.com/superjcd/gocrawler/fetcher"
 	"github.com/superjcd/gocrawler/parser"
-	"github.com/superjcd/gocrawler/scheduler"
 	"github.com/superjcd/gocrawler/scheduler/nsq"
 	"github.com/superjcd/gocrawler/store/mongo"
 	"github.com/superjcd/gocrawler/ua"
@@ -14,24 +13,22 @@ import (
 )
 
 type DefaultWorkerBuilderConfig struct {
-	name                    string
-	workers                 int
-	retries                 int
-	fetch_timeout           int
-	save_request_data       bool
-	max_run_time_seconds    int
-	nsqd_addr               string
-	nsqlookup_addr          string
-	nsq_topic_name          string
-	nsq_channel_name        string
-	nsq_second_topic_name   string
-	nsq_second_channel_name string
-	mongo_uri               string
-	mongo_database          string
-	mongo_collection        string
-	limit_rate              int
-	buffer_szie             int
-	auto_flush_interval     int
+	name                 string
+	workers              int
+	retries              int
+	fetch_timeout        int
+	save_request_data    bool
+	max_run_time_seconds int
+	nsqd_addr            string
+	nsqlookup_addr       string
+	nsq_topic_name       string
+	nsq_channel_name     string
+	mongo_uri            string
+	mongo_database       string
+	mongo_collection     string
+	limit_rate           int
+	buffer_szie          int
+	auto_flush_interval  int
 }
 
 // defaults
@@ -83,7 +80,7 @@ func (bc *DefaultWorkerBuilderConfig) MaxRunTime(seconds int) *DefaultWorkerBuil
 	return bc
 }
 
-func (bc *DefaultWorkerBuilderConfig) NsqScheduler(nsqd_addr, lookup_addr, topic, channel, second_topic, second_channel string) *DefaultWorkerBuilderConfig {
+func (bc *DefaultWorkerBuilderConfig) NsqScheduler(nsqd_addr, lookup_addr, topic, channel string) *DefaultWorkerBuilderConfig {
 	if nsqd_addr != "" {
 		bc.nsqd_addr = nsqd_addr
 	}
@@ -95,12 +92,6 @@ func (bc *DefaultWorkerBuilderConfig) NsqScheduler(nsqd_addr, lookup_addr, topic
 	}
 	if channel != "" {
 		bc.nsq_channel_name = channel
-	}
-	if second_topic != "" {
-		bc.nsq_second_topic_name = second_topic
-	}
-	if second_channel != "" {
-		bc.nsq_second_channel_name = second_channel
 	}
 
 	return bc
@@ -188,19 +179,7 @@ func (bc *DefaultWorkerBuilderConfig) Build(parser parser.Parser, opts ...worker
 	}
 	fetcher := fetcher.NewFectcher(time.Duration(bc.fetch_timeout)*time.Second, fetcher.WithUaGetter(ua.NewDefaultUAGetter()))
 
-	var mainScheduler scheduler.Scheduler
-	var useSecondScheduler bool
-
-	if bc.nsq_second_topic_name != "" && bc.nsq_second_channel_name != "" {
-		useSecondScheduler = true
-	}
-
-	if useSecondScheduler {
-		mainScheduler = nsq.NewNsqScheduler(bc.nsq_topic_name, bc.nsq_channel_name, bc.nsqd_addr, bc.nsqlookup_addr,
-			nsq.WithSecondScheduler(nsq.NewNsqScheduler(bc.nsq_second_topic_name, bc.nsq_second_channel_name, bc.nsqd_addr, bc.nsqlookup_addr)))
-	} else {
-		mainScheduler = nsq.NewNsqScheduler(bc.nsq_topic_name, bc.nsq_channel_name, bc.nsqd_addr, bc.nsqlookup_addr)
-	}
+	scheduler := nsq.NewNsqScheduler(bc.nsq_topic_name, bc.nsq_channel_name, bc.nsqd_addr, bc.nsqlookup_addr)
 
 	limiter := rate.NewLimiter(rate.Limit(bc.limit_rate), 1)
 	storage := mongo.NewBufferedMongoStorage(bc.mongo_uri,
@@ -214,7 +193,7 @@ func (bc *DefaultWorkerBuilderConfig) Build(parser parser.Parser, opts ...worker
 		bc.retries,
 		bc.save_request_data,
 		time.Second*time.Duration(bc.max_run_time_seconds),
-		worker.WithScheduler(mainScheduler),
+		worker.WithScheduler(scheduler),
 		worker.WithFetcher(fetcher),
 		worker.WithLimiter(limiter),
 		worker.WithParser(parser),
