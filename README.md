@@ -13,9 +13,13 @@ gocrawler是非常轻量级的分布式爬虫框架， 可以快速构建高性�
     - [自定义组件](#%E8%87%AA%E5%AE%9A%E4%B9%89%E7%BB%84%E4%BB%B6)
         - [替换网络请求组件](#%E6%9B%BF%E6%8D%A2%E7%BD%91%E7%BB%9C%E8%AF%B7%E6%B1%82%E7%BB%84%E4%BB%B6)
         - [替换存储组件](#%E6%9B%BF%E6%8D%A2%E5%AD%98%E5%82%A8%E7%BB%84%E4%BB%B6)
+        - [其他组件](#%E5%85%B6%E4%BB%96%E7%BB%84%E4%BB%B6)
+    - [请求去重](#%E8%AF%B7%E6%B1%82%E5%8E%BB%E9%87%8D)
+    - [任务计数](#%E4%BB%BB%E5%8A%A1%E8%AE%A1%E6%95%B0)
     - [错误处理和生命周期函数](#%E9%94%99%E8%AF%AF%E5%A4%84%E7%90%86%E5%92%8C%E7%94%9F%E5%91%BD%E5%91%A8%E6%9C%9F%E5%87%BD%E6%95%B0)
         - [沟通时机](#%E6%B2%9F%E9%80%9A%E6%97%B6%E6%9C%BA)
         - [沟通方式](#%E6%B2%9F%E9%80%9A%E6%96%B9%E5%BC%8F)
+    - [Dev模式](#dev%E6%A8%A1%E5%BC%8F)
     - [参考](#%E5%8F%82%E8%80%83)
 
 <!-- /TOC -->
@@ -244,7 +248,8 @@ func main() {
 }
 
 ```
-
+> `Scheduler`是构建gocrawler引擎的一个重要组件，而在gocrawler中所有的组件都是接口，所以用户可以轻松进行替换；其他组件的替换可以详见下面的[自定义组件](#自定义组件)
+ 
 #### 第二步：发送Request到seconndScheduler
 要想把Request发送到secondScheduler很简单，只要修改一下Request的IsSecondary字段就好， 将它设置为true就可以了， 例如:  
 假设我们在列表页抓到若干个详情页的url, 我们需要像上例一样在Parse函数中构造新的Request对象
@@ -274,13 +279,20 @@ gocrawler的默认Fetcher只是一个非常简单的网络请求组件，只使�
 - 从Cookie池获取cookie
 - 改变请求头
 
-Fetcher在gocrawler中只是一个接口， 所以只要实现fetch方法（具体函数签名见下面）， 然后通过类似上面这个例子, 在Build函数中添加`worker.WithFetcher(your_fetcher)`就能替换掉默认Fetcher。
+Fetcher在gocrawler中只是一个接口，接口定义如下: 
+
 ```go
 // Fetcher的定义
 type Fetcher interface {
 	Fetch(ctx context.Context, req *request.Request) (*http.Response, error)
 }
 ```
+如果想要替换掉默认Fetcher, 只要在在Build函数中添加`worker.WithFetcher(your_fetcher)`即可：
+```go
+config := default_builder.DefaultWorkerBuilderConfig{}
+worker := config.Name("zyte").Build(your_parser, worker.WithSFetcher(your_storage))
+```
+
 当然我会更推荐使用gocrawler中的NewFetcher去创建一个Fetcher对象, 结和Option模式， 将你需要的替换的部分(比如下面的代理获取组件)替换掉即可：
 
 ```go
@@ -299,7 +311,6 @@ type ProxyGetter interface {
 ```
 所以， 如果你需要从你的代理池中获取你的代理， 然后通过代理发起请求， 你只要去自己去实现`ProxyGetter`即可
 
-
 ### 替换存储组件
 gocrawler的`DefaultWorkerBuilderConfig`目前只支持使用mongodb来作为爬虫的默认存储组件， 如果用户想要使用别的存储组件， 只要实现一个自定义的Storage即可，然后和前面的自定义Fetcher类似， 通过在Build函数中添加`worker.WithStorage(your_storage)`就能替换掉默认存储组件:
 ```go
@@ -311,9 +322,40 @@ type Storage interface {
 默认的mongo存储组件是考虑了缓存机制的，用户可以通过调用`DefaultWorkerBuilderConfig`的`BufferSize`和`AutoFlushInterval`来定义缓存大小以及flush间隔（秒）， 例如：
 ```go
 config := default_builder.DefaultWorkerBuilderConfig{}
-worker := config.Name("zyte").Workers(10).LimitRate(10).BufferSize(100).AutoFlushInterval(10).Build(your_parser, your_options...)
+worker := config.Name("zyte").Workers(10).LimitRate(10).BufferSize(100).AutoFlushInterval(10).Build(your_parser, worker.WithStorage(your_storage))
 ```
 在上例中， 我们的爬虫有一个大小为100的缓存，缓存如果满了就会存储到mongo中， 如果缓存没有满，也会在10秒之后被flush到mongo中
+
+### 其他组件
+- [Visit](https://github.com/superjcd/gocrawler/blob/main/visit/visit.go) 去重组件
+- [Counter](https://github.com/superjcd/gocrawler/blob/main/counter/counter.go) 任务计数组件
+
+这些组件都可以通过`Build(parser, With<组件>(组件实现))`来嵌入到gocrawler中，或者说替换掉默认组件
+
+## 请求去重
+我们希望在爬虫的某个运行周期中， 不想重复请求， 可以使用Visit组件进行去重
+Visit组件的接口定义如下：
+```go
+type Visit interface {
+	SetVisitted(key string, ttl time.Duration) error
+	UnsetVisitted(key string) error
+	IsVisited(key string) bool
+}
+```
+`SetVisitted`会将某个请求在一定的声明周期内(ttl)会被标记为已被访问， 被标记过的请求(也就是Request对象)不会在这个周期内被再次访问
+gocrawler中有可以通过一下方式，通过redis来实现请求去重:
+```go
+package main 
+import (
+	"github.com/superjcd/gocrawler/worker"
+	"github.com/superjcd/gocrawler/vist/redis"
+)
+config := default_builder.DefaultWorkerBuilderConfig{}
+worker := config.Name("zyte").Build(your_parser, worker.WithVisiter(redis.NewRedisVisiter(redis.Options, prefixKey)))
+```
+> gocrawler会默认根据Request对象的Url和Method进行去重，如果想要添加`Request.Data`中值作为去重项，通过在Build函数中使用`worker.WithAddtionalHashKeys(your_keys)`来实现， 注意如果你指定的key不存在于`Request.Data`，会panic
+## 任务计数
+对分布式爬虫进行任务计数会有一些麻烦，目前gocraler默认提供的`redisTaskCounters`基于redis的乐观锁机制实现了一个可用的分布式计数， 使用方式和上诉其他组件类似，不再赘述 
 
 ## 错误处理和生命周期函数
 由于爬虫需要和网络以及各种日新月异的反爬技术打交道， 所以关于爬虫任务， 有一点是不会错的：
@@ -363,6 +405,7 @@ func CheckResponseStatus(ctx context.Context, resp *http.Response) (worker.Signa
 	return sig, nil
 }
 ```
+> 用户可以通过在Build函数中添加worker.WithAfterRequestHook(CheckResponseStatus)来注册这个hook,其他生命周期的hook的注册方式也是一样的
 `CheckResponseStatus`会去判断http.Response的状态码， 如果是200就返回`DummySignal`信号， 404就返回`ContinueWithoutRetrySignal`,在其他情况下就是返回`ContinueWithRetrySignal`信号；  
 当gocrawler接收到`DummySignal`的， 会继续执行； 接收到`ContinueWithoutRetrySignal`的时候则会跳过后面的步骤直接处理下一个请求；而接收到`ContinueWithRetrySignal`的时候， gocrawler就会发起重试， 完整的信号列表：
 ```golang
@@ -379,6 +422,11 @@ const (
 > Signal本质上就是一个8位有符号整数
 
 （最后还有一点需要注意的是， 上面的重试并不是立马重试， 而是请求会被重新发送到请求队列中，等待下一次被处理）
+
+
+
+## Dev模式
+TODO
 
 ## 参考
 - [我的博客](https://superjcd.github.io/p/golang%E5%88%86%E5%B8%83%E5%BC%8F%E7%88%AC%E8%99%AB%E8%AE%BE%E8%AE%A1/)

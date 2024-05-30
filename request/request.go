@@ -25,7 +25,7 @@ func (r *Request) Hash(hashFields ...string) string {
 		if fieldValue, ok := r.Data[field]; ok {
 			components[i+2] = []byte(fieldValue)
 		} else {
-			panic(fmt.Errorf("field not in request.Data"))
+			panic(fmt.Errorf("field not found in `request.Data`"))
 		}
 
 	}
