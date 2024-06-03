@@ -63,6 +63,12 @@ func (f *fectcher) Fetch(ctx context.Context, r *request.Request) (resp *http.Re
 		req.Header.Set("User-Agent", ua)
 	}
 
+	if f.headers != nil {
+		for key, value := range f.headers {
+			req.Header.Set(key, value)
+		}
+	}
+
 	resp, err = f.Cli.Do(req)
 
 	if err != nil {

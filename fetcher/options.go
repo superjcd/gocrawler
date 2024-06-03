@@ -14,6 +14,7 @@ type options struct {
 	proxyGetter  proxy.ProxyGetter
 	cookieGetter cookie.CookieGetter
 	uaGetter     ua.UaGetter
+	headers      map[string]string
 }
 
 type Option func(opts *options)
@@ -33,6 +34,12 @@ func WithProxyGetter(proxyGetter proxy.ProxyGetter) Option {
 func WithCookieGetter(cookieGetter cookie.CookieGetter) Option {
 	return func(opts *options) {
 		opts.cookieGetter = cookieGetter
+	}
+}
+
+func WithHeaders(headers map[string]string) Option {
+	return func(opts *options) {
+		opts.headers = headers
 	}
 }
 

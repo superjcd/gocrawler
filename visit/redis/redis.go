@@ -7,20 +7,20 @@ import (
 	"github.com/superjcd/gocrawler/visit"
 )
 
-type RedisVisiter struct {
+type RedisVisit struct {
 	VisitedKeyPrefix string
 	RCli             *redis.Client
 }
 
-var _ visit.Visit = (*RedisVisiter)(nil)
+var _ visit.Visit = (*RedisVisit)(nil)
 
-func NewRedisVisiter(r_config redis.Options, prefixKey string) *RedisVisiter {
-	rc := &RedisVisiter{VisitedKeyPrefix: prefixKey}
+func NewRedisVisit(r_config redis.Options, prefixKey string) *RedisVisit {
+	rc := &RedisVisit{VisitedKeyPrefix: prefixKey}
 	rc.RCli = redis.NewClient(&r_config)
 	return rc
 }
 
-func (rc *RedisVisiter) SetVisitted(key string, ttl time.Duration) error {
+func (rc *RedisVisit) SetVisitted(key string, ttl time.Duration) error {
 	if rc.VisitedKeyPrefix == "" {
 		key = "gocrawler:" + key
 	} else {
@@ -31,13 +31,13 @@ func (rc *RedisVisiter) SetVisitted(key string, ttl time.Duration) error {
 	return err
 }
 
-func (rc *RedisVisiter) UnsetVisitted(key string) error {
+func (rc *RedisVisit) UnsetVisitted(key string) error {
 	_, err := rc.RCli.Del(key).Result()
 
 	return err
 }
 
-func (rc *RedisVisiter) IsVisited(key string) bool {
+func (rc *RedisVisit) IsVisited(key string) bool {
 	_, err := rc.RCli.Get(key).Result()
 
 	return err == nil

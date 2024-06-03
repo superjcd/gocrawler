@@ -177,7 +177,7 @@ func (bc *DefaultWorkerBuilderConfig) Build(parser parser.Parser, opts ...worker
 	if bc.auto_flush_interval == 0 {
 		bc.auto_flush_interval = AUTO_FLUSH_INTERVAL
 	}
-	fetcher := fetcher.NewFectcher(time.Duration(bc.fetch_timeout)*time.Second, fetcher.WithUaGetter(ua.NewDefaultUAGetter()))
+	fetcher := fetcher.NewFectcher(time.Duration(bc.fetch_timeout)*time.Second, fetcher.WithUaGetter(ua.NewRoundRobinUAGetter()))
 
 	scheduler := nsq.NewNsqScheduler(bc.nsq_topic_name, bc.nsq_channel_name, bc.nsqd_addr, bc.nsqlookup_addr)
 

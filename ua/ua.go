@@ -15,6 +15,6 @@ func (u *roundRobinUA) Get(ctx context.Context) (string, error) {
 	return DEFAULT_UAS[rand.Intn(len(DEFAULT_UAS)-1)], nil
 }
 
-func NewDefaultUAGetter() *roundRobinUA {
+func NewRoundRobinUAGetter() *roundRobinUA {
 	return &roundRobinUA{}
 }

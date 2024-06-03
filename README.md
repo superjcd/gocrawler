@@ -12,6 +12,7 @@ gocrawler是非常轻量级的分布式爬虫框架， 可以快速构建高性�
             - [第二步：发送Request到seconndScheduler](#%E7%AC%AC%E4%BA%8C%E6%AD%A5%E5%8F%91%E9%80%81request%E5%88%B0seconndscheduler)
     - [自定义组件](#%E8%87%AA%E5%AE%9A%E4%B9%89%E7%BB%84%E4%BB%B6)
         - [替换网络请求组件](#%E6%9B%BF%E6%8D%A2%E7%BD%91%E7%BB%9C%E8%AF%B7%E6%B1%82%E7%BB%84%E4%BB%B6)
+            - [追加请求头](#%E8%BF%BD%E5%8A%A0%E8%AF%B7%E6%B1%82%E5%A4%B4)
         - [替换存储组件](#%E6%9B%BF%E6%8D%A2%E5%AD%98%E5%82%A8%E7%BB%84%E4%BB%B6)
         - [其他组件](#%E5%85%B6%E4%BB%96%E7%BB%84%E4%BB%B6)
     - [请求去重](#%E8%AF%B7%E6%B1%82%E5%8E%BB%E9%87%8D)
@@ -298,9 +299,9 @@ worker := config.Name("zyte").Build(your_parser, worker.WithSFetcher(your_storag
 ```go
 import (
 	"time"
-	"github.com/sup
-	erjcd/gocrawler/fetcher" 
+	"github.com/superjcd/gocrawler/fetcher" 
 )
+
 fetcher := fetcher.NewFetcher(10 * time.Second, fetcher.WithProxyGetter(your_proxy_getter))
 ```
 `your_proxy_getter`是你需要实现的proxy获取组件, 它的定义如下：
@@ -310,6 +311,34 @@ type ProxyGetter interface {
 }
 ```
 所以， 如果你需要从你的代理池中获取你的代理， 然后通过代理发起请求， 你只要去自己去实现`ProxyGetter`即可
+
+#### 追加请求头
+请求头是默认的Fetcher组件的一部分，如果用户想要添加请求头， 可以通过下面的方式进行实现：
+```go
+import (
+	"time"
+	"github.com/superjcd/gocrawler/fetcher" 
+)
+
+headers := map[string]string{
+	"accept": "application/json"
+}
+
+fetcher := fetcher.NewFetcher(10 * time.Second, fetcher.WithHeaders(headers))
+```
+`User-Agent`也是请求头的一部分, 用户可以基于上面的方式进行添加， 或者使用`UaGetter`动态地设置User-Agent，例如:
+```go
+import (
+	"time"
+	"github.com/superjcd/gocrawler/fetcher" 
+	"github.com/superjcd/gocrawler/ua" 
+)
+
+uaGetter :=  ua.NewRoundRobinUAGetter()
+fetcher := fetcher.NewFetcher(10 * time.Second, fetcher. WithUaGetter(uaGetter))
+```
+> uaGetter会在每一次Fetcher进行网络请求的时候， 从一个随机UA池中挑选一个user-agent;在默认的Build模式中, 默认fetcher会自定使用这个特性
+
 
 ### 替换存储组件
 gocrawler的`DefaultWorkerBuilderConfig`目前只支持使用mongodb来作为爬虫的默认存储组件， 如果用户想要使用别的存储组件， 只要实现一个自定义的Storage即可，然后和前面的自定义Fetcher类似， 通过在Build函数中添加`worker.WithStorage(your_storage)`就能替换掉默认存储组件:
@@ -346,12 +375,13 @@ type Visit interface {
 gocrawler中有可以通过一下方式，通过redis来实现请求去重:
 ```go
 package main 
+
 import (
 	"github.com/superjcd/gocrawler/worker"
 	"github.com/superjcd/gocrawler/vist/redis"
 )
 config := default_builder.DefaultWorkerBuilderConfig{}
-worker := config.Name("zyte").Build(your_parser, worker.WithVisiter(redis.NewRedisVisiter(redis.Options, prefixKey)))
+worker := config.Name("zyte").Build(your_parser, worker.WithVisiter(redis.NewRedisVisit(redis.Options, prefixKey)))
 ```
 > gocrawler会默认根据Request对象的Url和Method进行去重，如果想要添加`Request.Data`中值作为去重项，通过在Build函数中使用`worker.WithAddtionalHashKeys(your_keys)`来实现， 注意如果你指定的key不存在于`Request.Data`，会panic
 ## 任务计数
