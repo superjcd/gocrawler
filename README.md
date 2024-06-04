@@ -7,20 +7,25 @@ gocrawler是非常轻量级的分布式爬虫框架， 可以快速构建高性�
     - [快速开始](#%E5%BF%AB%E9%80%9F%E5%BC%80%E5%A7%8B)
         - [基础实现](#%E5%9F%BA%E7%A1%80%E5%AE%9E%E7%8E%B0)
         - [解析并提交更多Request](#%E8%A7%A3%E6%9E%90%E5%B9%B6%E6%8F%90%E4%BA%A4%E6%9B%B4%E5%A4%9Arequest)
-        - [发送Request到其他爬虫Worker](#%E5%8F%91%E9%80%81request%E5%88%B0%E5%85%B6%E4%BB%96%E7%88%AC%E8%99%ABworker)
-            - [第一步:替换默认Scheduler](#%E7%AC%AC%E4%B8%80%E6%AD%A5%E6%9B%BF%E6%8D%A2%E9%BB%98%E8%AE%A4scheduler)
-            - [第二步：发送Request到seconndScheduler](#%E7%AC%AC%E4%BA%8C%E6%AD%A5%E5%8F%91%E9%80%81request%E5%88%B0seconndscheduler)
     - [自定义组件](#%E8%87%AA%E5%AE%9A%E4%B9%89%E7%BB%84%E4%BB%B6)
         - [替换网络请求组件](#%E6%9B%BF%E6%8D%A2%E7%BD%91%E7%BB%9C%E8%AF%B7%E6%B1%82%E7%BB%84%E4%BB%B6)
-            - [追加请求头](#%E8%BF%BD%E5%8A%A0%E8%AF%B7%E6%B1%82%E5%A4%B4)
+            - [自定义代理](#%E8%87%AA%E5%AE%9A%E4%B9%89%E4%BB%A3%E7%90%86)
+            - [自定义请求头](#%E8%87%AA%E5%AE%9A%E4%B9%89%E8%AF%B7%E6%B1%82%E5%A4%B4)
+            - [自定义UA](#%E8%87%AA%E5%AE%9A%E4%B9%89ua)
         - [替换存储组件](#%E6%9B%BF%E6%8D%A2%E5%AD%98%E5%82%A8%E7%BB%84%E4%BB%B6)
         - [其他组件](#%E5%85%B6%E4%BB%96%E7%BB%84%E4%BB%B6)
-    - [请求去重](#%E8%AF%B7%E6%B1%82%E5%8E%BB%E9%87%8D)
-    - [任务计数](#%E4%BB%BB%E5%8A%A1%E8%AE%A1%E6%95%B0)
+            - [请求去重](#%E8%AF%B7%E6%B1%82%E5%8E%BB%E9%87%8D)
+            - [任务计数](#%E4%BB%BB%E5%8A%A1%E8%AE%A1%E6%95%B0)
+            - [限速](#%E9%99%90%E9%80%9F)
     - [错误处理和生命周期函数](#%E9%94%99%E8%AF%AF%E5%A4%84%E7%90%86%E5%92%8C%E7%94%9F%E5%91%BD%E5%91%A8%E6%9C%9F%E5%87%BD%E6%95%B0)
         - [沟通时机](#%E6%B2%9F%E9%80%9A%E6%97%B6%E6%9C%BA)
         - [沟通方式](#%E6%B2%9F%E9%80%9A%E6%96%B9%E5%BC%8F)
-    - [Dev模式](#dev%E6%A8%A1%E5%BC%8F)
+    - [进阶](#%E8%BF%9B%E9%98%B6)
+        - [发送Request到其他爬虫Worker](#%E5%8F%91%E9%80%81request%E5%88%B0%E5%85%B6%E4%BB%96%E7%88%AC%E8%99%ABworker)
+            - [第一步:替换默认Scheduler](#%E7%AC%AC%E4%B8%80%E6%AD%A5%E6%9B%BF%E6%8D%A2%E9%BB%98%E8%AE%A4scheduler)
+            - [第二步：发送Request到seconndScheduler](#%E7%AC%AC%E4%BA%8C%E6%AD%A5%E5%8F%91%E9%80%81request%E5%88%B0seconndscheduler)
+        - [任务优先级](#%E4%BB%BB%E5%8A%A1%E4%BC%98%E5%85%88%E7%BA%A7)
+        - [Dev模式](#dev%E6%A8%A1%E5%BC%8F)
     - [参考](#%E5%8F%82%E8%80%83)
 
 <!-- /TOC -->
@@ -110,6 +115,8 @@ func main() {
 	worker.Run()
 }
 ```
+> `MaxRunTime`定义Worker的运行时长(单位:秒);`Workers`定义并发数;`LimitRate`定义每秒的最大请求数量
+
 在main.go路径运行命令`go run .`就能顺利地启动爬虫。当然为了让我们的爬虫worker工作起来， 我们需要喂给worker一些任务；
 在pub/main.go中编写提交任务的逻辑(生产者)：
 ```go
@@ -217,65 +224,11 @@ func (p *zyteParser) Parse(ctx context.Context, r *http.Response) (*parser.Parse
 这样,当我们请求第一页的时候，就可以连带把其他页面的请求一并传递给任务队列(当然正常情况下, 最大页码数这个值是需要自己去解析的）
 
 
-### 发送Request到其他爬虫Worker
-如果我们想要把请求传递给其他的woker该怎么办呢， 假设我们有两个爬虫worker：
-- 列表worker, 获取列表项
-- 详情worker, 获取每一页的详情信息
 
-这种需要用到多个worker的场景其实非常常见， 比如以抓取房价信息为例， 房屋的简要信息会以列表页形式存在， 比如一个列表页上面可能有20个房屋链接；然后当我们点击每个链接， 就可以获得该房屋的详情信息；    
-由于列表页和详情页的url以及页面信息通常是不同的， 所以比较合理的方式就是分别运行两个Worker(可以共用部分组件， 比如fetcher), 那么现在需要面对的问题是， 如何在**列表爬虫**抓取列表页信息的时候， 把详情页的请求提交到**详情爬虫**？  
-在gocrawler中实现这个方式只需要两步：
-#### 第一步:替换默认Scheduler
-gocrawler中的Scheduler组件有一个Option（选项）是secondScheduler（也是一个Scheduler接口）， 如果secondScheduler非空， 那么我们就能把请求传递给这个seconndScheduler（如何传递请求， 第二个步骤会讲）, 只要另外一个爬虫Worker订阅了seconndScheduler的消息，那么第二个worker自然也能同时进行运行。  
-
-```go
-package main 
-
-import (
-	"github.com/superjcd/gocrawler/worker"
-	"github.com/superjcd/gocrawler/scheduler/nsq"
-)
-
-
-func main() {
-	// 重新准备一个scheduler
-	secondScheduler := nsq.NewNsqScheduler(your_second_topic, your_second_channel, "localhost:4150", "localhost:4161")
-	scheduler := nsq.NewNsqScheduler(your_second_topic, your_second_channel, "localhost:4150", "localhost:4161", nsq.WithSecondScheduler(secondScheduler))
-
-	config := default_builder.DefaultWorkerBuilderConfig{}
-	worker := config.Name("zyte").MaxRunTime(300).Workers(10).LimitRate(10).Build(
-		parser.NewZyteParser(),worker.WithScheduler(scheduler),) // 替换掉默认shceduler
-	worker.Run()
-}
-
-```
-> `Scheduler`是构建gocrawler引擎的一个重要组件，而在gocrawler中所有的组件都是接口，所以用户可以轻松进行替换；其他组件的替换可以详见下面的[自定义组件](#自定义组件)
- 
-#### 第二步：发送Request到seconndScheduler
-要想把Request发送到secondScheduler很简单，只要修改一下Request的IsSecondary字段就好， 将它设置为true就可以了， 例如:  
-假设我们在列表页抓到若干个详情页的url, 我们需要像上例一样在Parse函数中构造新的Request对象
-```go
-...    
-	for _, url := range urls{ // urls是详情页请求地址队列
-		reqData := make(map[string]string, 0)
-		reqData["taskId"] = uid.String()
-		newRequest := request.Request{
-			URL:         url,
-			Method:      "GET",
-			Data:        reqData,
-			IsSecondary: true,   // 这里是关键
-		}
-		requests = append(requests, &newRequest)
-	}
-    ...
-	result.Items = resultItems
-	result.Requests = requests
-
-```
 
 ## 自定义组件
 ### 替换网络请求组件
-gocrawler的默认Fetcher只是一个非常简单的网络请求组件，只使用默认网络请求组件在应对一些常见的反扒手段的时候肯定是远远不够的， 所以我们有时候我们希望Fetcher可以支持
+gocrawler的默认Fetcher只是一个非常简单的网络请求组件，只使用默认网络请求组件在应对一些常见的反扒手段的时候肯定是远远不够的， 所以我们有时候我们希望Fetcher可以支持诸如:
 - 从代理池获取代理
 - 从Cookie池获取cookie
 - 改变请求头
@@ -291,10 +244,11 @@ type Fetcher interface {
 如果想要替换掉默认Fetcher, 只要在在Build函数中添加`worker.WithFetcher(your_fetcher)`即可：
 ```go
 config := default_builder.DefaultWorkerBuilderConfig{}
-worker := config.Name("zyte").Build(your_parser, worker.WithFetcher(your_storage))
+worker := config.Name("zyte").Build(your_parser, worker.WithFetcher(your_fetcher))
 ```
-
-当然我会更推荐使用gocrawler中的NewFetcher去创建一个Fetcher对象, 结和Option模式， 将你需要的替换的部分(比如下面的代理获取组件)替换掉即可：
+你的自定义Fetcher--your_fetcher只要实现上诉的Fetcher定义即可， 当然你可以使用gocraler的NewFetcher穿件一个Fetcher对象， 然后结合Option模式修改默认Fetcher的行为(诸如代理请求头等)
+#### 自定义代理
+使用gocrawler中的NewFetcher去创建一个Fetcher对象,， 替换掉Fetcher组件：
 
 ```go
 import (
@@ -304,15 +258,14 @@ import (
 
 fetcher := fetcher.NewFetcher(10 * time.Second, fetcher.WithProxyGetter(your_proxy_getter))
 ```
-`your_proxy_getter`是你需要实现的proxy获取组件, 它的定义如下：
+`your_proxy_getter`是你需要实现的proxy获取组件, `ProxyGetter`的定义如下：
 ```
 type ProxyGetter interface {
 	Get(*http.Request) (*url.URL, error)
 }
 ```
-所以， 如果你需要从你的代理池中获取你的代理， 然后通过代理发起请求， 你只要去自己去实现`ProxyGetter`即可
 
-#### 追加请求头
+#### 自定义请求头
 请求头是默认的Fetcher组件的一部分，如果用户想要添加请求头， 可以通过下面的方式进行实现：
 ```go
 import (
@@ -326,7 +279,10 @@ headers := map[string]string{
 
 fetcher := fetcher.NewFetcher(10 * time.Second, fetcher.WithHeaders(headers))
 ```
+
+#### 自定义UA
 `User-Agent`也是请求头的一部分, 用户可以基于上面的方式进行添加， 或者使用`UaGetter`动态地设置User-Agent，例如:
+
 ```go
 import (
 	"time"
@@ -337,7 +293,7 @@ import (
 uaGetter :=  ua.NewRoundRobinUAGetter()
 fetcher := fetcher.NewFetcher(10 * time.Second, fetcher. WithUaGetter(uaGetter))
 ```
-> uaGetter会在每一次Fetcher进行网络请求的时候， 从一个随机UA池中挑选一个user-agent;在默认的Build模式中, 默认fetcher会自定使用这个特性
+> uaGetter会在每一次Fetcher进行网络请求的时候， 从一个随机UA池中挑选一个user-agent;在默认的Build模式中, 默认fetcher会自动使用这个特性
 
 
 ### 替换存储组件
@@ -358,10 +314,11 @@ worker := config.Name("zyte").Workers(10).LimitRate(10).BufferSize(100).AutoFlus
 ### 其他组件
 - [Visit](https://github.com/superjcd/gocrawler/blob/main/visit/visit.go) 去重组件
 - [Counter](https://github.com/superjcd/gocrawler/blob/main/counter/counter.go) 任务计数组件
+- Limit  限速
 
 这些组件都可以通过`Build(parser, With<组件>(组件实现))`来嵌入到gocrawler中，或者说替换掉默认组件
 
-## 请求去重
+#### 请求去重
 我们希望在爬虫的某个运行周期中， 不想重复请求， 可以使用Visit组件进行去重
 Visit组件的接口定义如下：
 ```go
@@ -384,8 +341,22 @@ config := default_builder.DefaultWorkerBuilderConfig{}
 worker := config.Name("zyte").Build(your_parser, worker.WithVisiter(redis.NewRedisVisit(redis.Options, prefixKey)))
 ```
 > gocrawler会默认根据Request对象的Url和Method进行去重，如果想要添加`Request.Data`中值作为去重项，通过在Build函数中使用`worker.WithAddtionalHashKeys(your_keys)`来实现， 注意如果你指定的key不存在于`Request.Data`，会panic
-## 任务计数
+#### 任务计数
 对分布式爬虫进行任务计数会有一些麻烦，目前gocraler默认提供的`redisTaskCounters`基于redis的乐观锁机制实现了一个可用的分布式计数， 使用方式和上诉其他组件类似，不再赘述 
+
+
+####  限速 
+```golang
+package main 
+
+import (
+	"github.com/superjcd/gocrawler/worker"
+	"github.com/superjcd/gocrawler/vist/redis"
+)
+config := default_builder.DefaultWorkerBuilderConfig{}
+worker := config.Name("zyte").Build(your_parser, worker.WithLimiter(your_limit))
+```
+> 一般情况下使用config.Limit(number)足够了(见上面的快速开始)， number表示每秒钟允许的请求次数
 
 ## 错误处理和生命周期函数
 由于爬虫需要和网络以及各种日新月异的反爬技术打交道， 所以关于爬虫任务， 有一点是不会错的：
@@ -454,9 +425,73 @@ const (
 （最后还有一点需要注意的是， 上面的重试并不是立马重试， 而是请求会被重新发送到请求队列中，等待下一次被处理）
 
 
+## 进阶
+### 发送Request到其他爬虫Worker
+如果我们想要把请求传递给其他的woker该怎么办呢， 假设我们有两个爬虫worker：
+- 列表worker, 获取列表项
+- 详情worker, 获取每一页的详情信息
 
-## Dev模式
+这种需要用到多个worker的场景很常见， 比如以抓取房价信息为例， 房屋的简要信息会以列表页形式存在， 比如一个列表页上面可能有20个房屋链接；然后当我们点击每个链接， 就可以获得该房屋的详情信息；    
+由于列表页和详情页的url以及页面信息通常是不同的， 所以比较合理的方式就是分别运行两个Worker(可以共用部分组件， 比如fetcher), 那么现在需要面对的问题是， 如何在**列表爬虫**抓取列表页信息的时候， 把详情页的请求提交到**详情爬虫**？  
+在gocrawler中实现这个方式只需要两步：
+#### 第一步:替换默认Scheduler
+gocrawler中的Scheduler组件有一个Option（选项）是secondScheduler（也是一个Scheduler接口）， 如果secondScheduler非空， 那么我们就能把请求传递给这个seconndScheduler（如何传递请求， 第二个步骤会讲）, 只要另外一个爬虫Worker订阅了seconndScheduler的消息，那么第二个worker自然也能同时进行运行。  
+
+```go
+package main 
+
+import (
+	"github.com/superjcd/gocrawler/worker"
+	"github.com/superjcd/gocrawler/scheduler/nsq"
+)
+
+
+func main() {
+	// 重新准备一个scheduler
+	secondScheduler := nsq.NewNsqScheduler(your_second_topic, your_second_channel, "localhost:4150", "localhost:4161")
+	scheduler := nsq.NewNsqScheduler(your_second_topic, your_second_channel, "localhost:4150", "localhost:4161", nsq.WithSecondScheduler(secondScheduler))
+
+	config := default_builder.DefaultWorkerBuilderConfig{}
+	worker := config.Name("zyte").MaxRunTime(300).Workers(10).LimitRate(10).Build(
+		parser.NewZyteParser(),worker.WithScheduler(scheduler),) // 替换掉默认shceduler
+	worker.Run()
+}
+
+```
+> `Scheduler`是构建gocrawler引擎的一个重要组件，而在gocrawler中所有的组件都是接口，所以用户可以轻松进行替换；其他组件的替换可以详见下面的[自定义组件](#自定义组件)
+ 
+#### 第二步：发送Request到seconndScheduler
+要想把Request发送到secondScheduler很简单，只要修改一下Request的IsSecondary字段就好， 将它设置为true就可以了， 例如:  
+假设我们在列表页抓到若干个详情页的url, 我们需要像上例一样在Parse函数中构造新的Request对象
+```go
+...    
+	for _, url := range urls{ // urls是详情页请求地址队列
+		reqData := make(map[string]string, 0)
+		reqData["taskId"] = uid.String()
+		newRequest := request.Request{
+			URL:         url,
+			Method:      "GET",
+			Data:        reqData,
+			IsSecondary: true,   // 这里是关键
+		}
+		requests = append(requests, &newRequest)
+	}
+    ...
+	result.Items = resultItems
+	result.Requests = requests
+
+```
+
+> 理论上用户也可以把所有逻辑写在一个Worker中, 比如在Parser中根据不同Response采用不同的解析策略（存储组件也是同理）；好处是不需要分发Request到secondScheduler，但同时会失去对不同爬虫任务的控制， 比如爬虫的限速， worker数量等等
+
+### 任务优先级
+首先我们需要确定什么是优先级？  
+如果是需要先保证Worker1完成之后再进行Worker2， 完全可以结合[任务计数](#任务计数)在确认Worker1完成之后再提交任务到Worker2;
+如过我们希望Worker1和Worker2同时进行，但是希望Worker1的速度要比Worker2更快(比如2:1), 一种简单的方式是调整两个Worker的并发数和RateLimit；当然如果要做到更精细的控制， 也可以通过任务计数器实时调整Producer提交任务的速度(如果用户使用的是gocrawler的默认计数器， 其实只要分别读取两个worker对应的redis键的数值即可)
+
+### Dev模式
 TODO
+
 
 ## 参考
 - [我的博客](https://superjcd.github.io/p/golang%E5%88%86%E5%B8%83%E5%BC%8F%E7%88%AC%E8%99%AB%E8%AE%BE%E8%AE%A1/)
