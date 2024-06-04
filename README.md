@@ -291,7 +291,7 @@ type Fetcher interface {
 如果想要替换掉默认Fetcher, 只要在在Build函数中添加`worker.WithFetcher(your_fetcher)`即可：
 ```go
 config := default_builder.DefaultWorkerBuilderConfig{}
-worker := config.Name("zyte").Build(your_parser, worker.WithSFetcher(your_storage))
+worker := config.Name("zyte").Build(your_parser, worker.WithFetcher(your_storage))
 ```
 
 当然我会更推荐使用gocrawler中的NewFetcher去创建一个Fetcher对象, 结和Option模式， 将你需要的替换的部分(比如下面的代理获取组件)替换掉即可：
